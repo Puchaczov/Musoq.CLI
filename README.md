@@ -84,6 +84,87 @@ Output:
 ```
 </details>
 
+## ⛲ Query your CLI Directly With Pipe Operator Support
+
+### With Powershell
+
+```powershell
+wmic process get name,processid,workingsetsize | Musoq.exe run query "select t.Name, Count(t.Name) from #stdin.table(true) t group by t.Name having Count(t.Name) > 1"
+```
+
+Output:
+
+```
+┌─────────────────────────┬───────────────┐
+│ t.Name                  │ Count(t.Name) │
+├─────────────────────────┼───────────────┤
+│ csrss.exe               │ 2             │
+│ fontdrvhost.exe         │ 2             │
+│ svchost.exe             │ 92            │
+└─────────────────────────┴───────────────┘
+```
+
+### With Bash
+
+```bash
+
+```
+
+### Extracting Structured Output From Text
+
+```powershell
+Get-Content 'C:\Some\Path\To\Text' | Musoq.exe run query "select l.LicenseNameOnly, l.Copyright, l.FullClause, l.LicenseSimpleDescription from #stdin.text('OpenAi', 'gpt-4o') l"
+```
+
+Output:
+
+```
+┌───────────────────────┬────────────────────────────────────────────────┬─────────────────────────────────────────────────────────────────────────────────┐
+│ License               │ Copyright                                      │ LicenseSimpleDescription                                                        │
+├───────────────────────┼────────────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤
+│ The MIT License (MIT) │ Copyright (c) .NET Foundation and Contributors │ Permission is hereby granted, free of charge, to any person obtaining a copy of │
+│                       │                                                │ this software and associated documentation files (the 'Software'), to deal in   │
+│                       │                                                │ the Software without restriction, including without limitation the rights to    │
+│                       │                                                │ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies   │
+│                       │                                                │ of the Software, and to permit persons to whom the Software is furnished to do  │
+│                       │                                                │ so, subject to the following conditions: The above copyright notice and this    │
+│                       │                                                │ permission notice shall be included in all copies or substantial portions of    │
+│                       │                                                │ the Software. THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,   │
+│                       │                                                │ EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF              │
+│                       │                                                │ MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO    │
+│                       │                                                │ EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES   │
+│                       │                                                │ OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,        │
+│                       │                                                │ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER     │
+│                       │                                                │ DEALINGS IN THE SOFTWARE.                                                       │
+└───────────────────────┴────────────────────────────────────────────────┴─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Extracting From Image With Query (all columns are strings)
+
+```powershell
+Musoq.exe image encode "C:\Images\Receipt1.jpg" | Musoq.exe run query "select s.Shop, s.ProductName, s.Price from #stdin.image('OpenAi', 'gpt-4o') s"
+```
+
+Output:
+
+```
+┌─────────────┬─────────────────────────────────────┬─────────┐
+│ s.Shop      │ s.ProductName                       │ s.Price │
+├─────────────┼─────────────────────────────────────┼─────────┤
+│ MEDIAEXPERT │ LOGITECH MOUSE                      │ 59.00   │
+└─────────────┴─────────────────────────────────────┴─────────┘
+```
+
+### Extracting From Image With Query (columns are extracted with types hinted)
+
+```powershell
+Musoq.exe image encode "C:\Images\Receipt1.jpg" | Musoq.exe run query "table Receipt { Shop 'System.String', ProductName 'System.String', Price 'System.Decimal' }; couple #stdin.image with table Receipt as SourceOfReceipts; select s.Shop, s.ProductName, s.Price from SourceOfReceipts('OpenAi', 'gpt-4o') s"
+```
+
+### Combining Multiple Outputs Into One Table
+
+
+
 ## 🔍 Explore CLI Options
 
 Discover more CLI options with the `--help` command:
