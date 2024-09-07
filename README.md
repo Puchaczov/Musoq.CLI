@@ -194,6 +194,56 @@ Output:
 └──────────────┴────────────────────────────────────────┴────────┴────────────────────────────────────────┴─────────────────┴───────────────┴──────────────┘
 ```
 
+### Extracting Data From Text (using Ollama)
+
+```text
+Ticket #: 1234567
+Date: 2024-09-07 14:30:22 UTC
+Customer: Jane Doe (jane.doe@email.com)
+Product: CloudSync Pro v3.5.2
+OS: macOS 12.3.1
+
+Subject: Sync Failure and Data Loss
+
+Description:
+Customer reported that CloudSync Pro failed to sync properly on 2024-09-06 around 18:45 local time. 
+The sync process started but stopped at 43% completion with error code E-1010. 
+After the failed sync, the customer noticed that approximately 250 MB of data was missing from their local drive.
+The customer has tried restarting the application and their computer, but the issue persists.
+They are using CloudSync Pro on 3 devices in total: MacBook Pro, iPhone 13, and iPad Air.
+
+Steps to Reproduce:
+1. Open CloudSync Pro v3.5.2 on macOS 12.3.1
+2. Initiate a full sync
+3. Observe sync progress halting at 43% with error E-1010
+
+Impact: High - Customer cannot sync data and has lost important files
+
+Troubleshooting Attempted:
+- Restarted application: No effect
+- Restarted computer: No effect
+- Checked internet connection: Stable at 100 Mbps
+
+Additional Notes:
+Customer is a premium subscriber and requests urgent assistance due to lost data containing work-related documents.
+```
+
+```powershell
+Get-Content "C:\Tickets\ticket.txt" | ./Musoq.exe run query "select t.TicketNumber, t.TicketDate, t.CustomerName, t.CustomerEmail, t.Product, t.OperatingSystem, t.Subject, t.ImpactLevel, t.ErrorCode, t.DataLossAmount, t.DeviceCount, case when ToLowerInvariant(t.SubscriptionType) like '%premium%' then 'PREMIUM' else 'STANDARD' end from #stdin.text('Ollama', 'llama3.1') t"
+```
+
+Output:
+
+```
+┌────────────────┬─────────────────────────┬───────────────────────────────┬────────────────────┬──────────────────────┬───────────────────┬────────────────────────────┬───────────────┬─────────────┬──────────────────┬───────────────┬─────────────────────────────────────────────┐
+│ t.TicketNumber │ t.TicketDate            │ t.CustomerName                │ t.CustomerEmail    │ t.Product            │ t.OperatingSystem │ t.Subject                  │ t.ImpactLevel │ t.ErrorCode │ t.DataLossAmount │ t.DeviceCount │ case when                                   │
+│                │                         │                               │                    │                      │                   │                            │               │             │                  │               │ ToLowerInvariant(t.SubscriptionType) like   │
+│                │                         │                               │                    │                      │                   │                            │               │             │                  │               │ %premium% then PREMIUM else STANDARD end    │
+├────────────────┼─────────────────────────┼───────────────────────────────┼────────────────────┼──────────────────────┼───────────────────┼────────────────────────────┼───────────────┼─────────────┼──────────────────┼───────────────┼─────────────────────────────────────────────┤
+│ 1234567        │ 2024-09-07 14:30:22 UTC │ Jane Doe (jane.doe@email.com) │ jane.doe@email.com │ CloudSync Pro v3.5.2 │ macOS 12.3.1      │ Sync Failure and Data Loss │ High          │ E-1010      │ 250 MB           │ 3             │ PREMIUM                                     │
+└────────────────┴─────────────────────────┴───────────────────────────────┴────────────────────┴──────────────────────┴───────────────────┴────────────────────────────┴───────────────┴─────────────┴──────────────────┴───────────────┴─────────────────────────────────────────────┘
+```
+
 ## 🔍 Explore CLI Options
 
 Discover more CLI options with the `--help` command:
