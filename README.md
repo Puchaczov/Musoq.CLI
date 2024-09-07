@@ -84,11 +84,14 @@ Output:
 ```
 </details>
 
-## ⛲ Query your CLI Directly With Pipe Operator Support
+## ⛲ Pipe Extractions
+
+The tool allows to extract various informations from photos (through LLMs providers like OpenAi or Ollama), process CLI tables as they would be native data sources. This way, you can queries and transform those data directly.
 
 ### With Powershell
 
 ```powershell
+//true determine whether table has headers or not
 wmic process get name,processid,workingsetsize | Musoq.exe run query "select t.Name, Count(t.Name) from #stdin.table(true) t group by t.Name having Count(t.Name) > 1"
 ```
 
@@ -107,7 +110,20 @@ Output:
 ### With Bash
 
 ```bash
+ps -eo comm,pid,rss --sort=-rss | head -n 20 | Musoq.exe run query "select t.COMMAND, t.PID, t.RSS from #stdin.table(true) t"
+```
 
+Output:
+
+```bash
+┌─────────────────┬───────┬───────┐
+│ t.COMMAND       │ t.PID │ t.RSS │
+├─────────────────┼───────┼───────┤
+│ python3.10      │ 339   │ 47684 │
+│ snapd           │ 251   │ 36312 │
+│ systemd-journal │ 40    │ 19616 │
+│ docker-desktop- │ 2767  │ 17884 │
+└─────────────────┴───────┴───────┘
 ```
 
 ### Extracting Structured Output From Text
@@ -163,7 +179,20 @@ Musoq.exe image encode "C:\Images\Receipt1.jpg" | Musoq.exe run query "table Rec
 
 ### Combining Multiple Outputs Into One Table
 
+```powershell
+& { docker image ls; .\Musoq.exe separator; docker container ls } | ./Musoq.exe run query "select t.IMAGE_ID, t.REPOSITORY, t.SIZE, t.TAG, t2.CONTAINER_ID, t2.CREATED, t2.STATUS from #stdin.table(true) t inner join #stdin.table(true) t2 on t.IMAGE_ID = t2.IMAGE"
+```
 
+Output:
+
+```
+┌──────────────┬────────────────────────────────────────┬────────┬────────────────────────────────────────┬─────────────────┬───────────────┬──────────────┐
+│ t.IMAGE_ID   │ t.REPOSITORY                           │ t.SIZE │ t.TAG                                  │ t2.CONTAINER_ID │ t2.CREATED    │ t2.STATUS    │
+├──────────────┼────────────────────────────────────────┼────────┼────────────────────────────────────────┼─────────────────┼───────────────┼──────────────┤
+│ cc802bd2841e │ qdrant/qdrant                          │ 275MB  │ latest                                 │ d87759bd4581    │ 3 weeks ago   │ Up 3 weeks   │
+│ 878983f8f504 │ redis                                  │ 174MB  │ latest                                 │ 887d68135231    │ 3 weeks ago   │ Up 3 weeks   │
+└──────────────┴────────────────────────────────────────┴────────┴────────────────────────────────────────┴─────────────────┴───────────────┴──────────────┘
+```
 
 ## 🔍 Explore CLI Options
 
