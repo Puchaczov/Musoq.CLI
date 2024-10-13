@@ -84,6 +84,48 @@ Output:
 ```
 </details>
 
+## 🔬 Query Code with SQL
+
+Musoq allows you to query your code using SQL-like syntax. This feature uses **buckets** to manage loaded solutions. 
+Buckets are a powerful feature for efficient data management and querying. Here's what you need to know:
+
+- A bucket allows you to load multiple data sources into a single AssemblyLoadContext.
+- It preserves loaded data in memory between queries, significantly improving performance.
+- Without buckets, each query would create a new AssemblyLoadContext, reloading data every time.
+- Using a named bucket lets you load data once and reuse it across multiple queries, saving time and resources.
+
+Here's how to use buckets for code querying:
+
+Create a bucket for various plugin cross requests data
+
+```bash
+Musoq bucket create test
+```
+
+Then use that bucket to load solution into
+
+```bash
+Musoq csharp solution load --solution "mnt\something\repos\Repo.sln" --bucket test
+```
+
+Query your solution within a bucket
+
+```bash
+Musoq run query "select p.Name from #csharp.solution('mnt\something\repos\Repo.sln') s cross apply s.Projects p" --bucket test
+```
+
+After you've done quering, unload solution from the bucket
+
+```bash
+Musoq csharp solution unload --solution "mnt\something\repos\Repo.sln" --bucket test
+```
+
+Or you can just delete bucket
+
+```bash
+Musoq bucket delete test
+```
+
 ## ⛲ Pipe Extractions
 
 The tool allows to extract various informations from photos (through LLMs providers like OpenAi or Ollama), process CLI tables as they would be native data sources. This way, you can queries and transform those data directly.
