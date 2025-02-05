@@ -12,30 +12,67 @@ Musoq.CLI is a powerful command-line interface that brings the magic of [Musoq](
 - 📊 Multiple output formats (Raw, CSV, JSON, Interpreted JSON)
 - 🚫 No additional dependencies required
 
-## 🚀 Quick Start
+## 🚀 Easy Install / Update / Remove
 
-### With Server Observation
+### Install / Update
 
-1. 📥 Download the zipped program for your architecture
-2. 📂 Unpack to a directory
-3. 🖥️ Open first console in the directory
-4. 🏃‍♂️ Run the server:
-   - Windows: `Musoq.exe serve --wait-until-exit`
-   - Linux: `./Musoq serve --wait-until-exit` (use `chmod +x ./Musoq` first)
-5. 🖥️ Open second console in the directory
-6. 🔍 Run a query:
-   - Windows: `Musoq.exe run query "select 1 from #system.dual()"`
-   - Linux: `./Musoq run query "select 1 from #system.dual()"`
-7. 🛑 To quit the server: `Musoq quit`
+Powershell:
 
-### Single Console
+```powershell
+irm https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/powershell/install.ps1 | iex
+```
 
-1. 📥 Download and unpack as above
-2. 🖥️ Open console in the directory
+Shell using curl:
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/powershell/install.sh | sh
+```
+
+Shell using wget:
+
+```shell
+wget -qO- https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/powershell/install.sh | sh
+```
+
+Bash:
+
+### Remove
+
+Powershell:
+
+```powershell
+irm https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/powershell/remove.ps1 | iex
+```
+
+Shell using curl:
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/shell/remove.sh | sh
+```
+
+Shell using wget:
+
+```shell
+wget -qO- https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/shell/remove.sh | sh
+```
+
+### With Server In Background
+
+1. 📥 Install Musoq.CLI using the easy installation script above
+2. 🖥️ Open any terminal
 3. 🏃‍♂️ Run the server in background:
-   - Windows: `Musoq.exe serve`
-   - Linux: `./Musoq serve`
+   - Windows & Linux: `Musoq serve`
 4. 🔍 Run queries as needed
+5. 🛑 To quit the server: `Musoq quit`
+
+### With Server In Foreground
+
+1. 📥 Install Musoq.CLI using the easy installation script above
+2. 🖥️ Open one terminal and run the server:
+   - Windows & Linux: `Musoq serve --wait-until-exit`
+3. 🖥️ Open another terminal
+4. 🔍 Run a query:
+   - Windows & Linux: `Musoq run query "select 1 from #system.dual()"`
 5. 🛑 To quit the server: `Musoq quit`
 
 ## 🎨 Output Formats

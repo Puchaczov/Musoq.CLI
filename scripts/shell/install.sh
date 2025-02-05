@@ -1,0 +1,233 @@
+#!/bin/bash
+
+# Ensure script is run as root
+if [ "$EUID" -ne 0 ]; then
+    echo "Please run as root."
+    exit 1
+fi
+
+DEBUG=0
+VERSION=""
+
+# Parse options: -d for debug, -v for version
+while getopts "dv:" opt; do
+  case $opt in
+    d)
+      DEBUG=1
+      ;;
+    v)
+      VERSION="$OPTARG"
+      ;;
+    *)
+      echo "Usage: $0 [-d] [-v version]"
+      exit 1
+      ;;
+  esac
+done
+
+[ $DEBUG -eq 1 ] && set -x
+
+check_dependencies() {
+  for cmd in curl jq unzip uname; do
+    if ! command -v $cmd >/dev/null 2>&1; then
+      echo "Missing dependency: $cmd. Please install it and retry."
+      exit 1
+    fi
+  done
+}
+check_dependencies
+
+# Get system architecture
+get_arch() {
+  local arch=$(uname -m)
+  case $arch in
+    x86_64|amd64) echo "x64" ;;
+    aarch64|arm64) echo "arm64" ;;
+    *) echo "unsupported" ;;
+  esac
+}
+
+ARCH=$(get_arch)
+if [ "$ARCH" = "unsupported" ]; then
+  echo "Unsupported architecture: $(uname -m)"
+  exit 1
+fi
+echo "Detected architecture: $ARCH"
+
+# Functions
+normalize_version() {
+  local version=$1
+  IFS='.' read -ra parts <<< "$version"
+  # Ensure 4 parts
+  for ((i=${#parts[@]}; i<4; i++)); do
+    parts[i]=0
+  done
+  # By default, return full four parts; for GitHub comparisons, join only first three
+  if [ "$2" == "github" ]; then
+    echo "${parts[0]}.${parts[1]}.${parts[2]}"
+  else
+    echo "${parts[0]}.${parts[1]}.${parts[2]}.${parts[3]}"
+  fi
+}
+
+stop_musoq() {
+  echo "Stopping running Musoq instance if exists..."
+  pkill -f Musoq 2>/dev/null || true
+  sleep 5
+}
+
+download_asset() {
+  local url=$1
+  local dest=$2
+  if [ ! -f "$dest" ]; then
+    echo "Downloading $url..."
+    if ! curl -L "$url" -o "$dest"; then
+      echo "Download failed"
+      exit 1
+    fi
+  else
+    echo "Using cached file: $dest"
+  fi
+}
+
+INSTALL_DIR="/opt/Musoq"
+MUSOQ_EXE="$INSTALL_DIR/Musoq"
+
+# If Musoq is already installed, check version
+if [ -x "$MUSOQ_EXE" ]; then
+  installedOutput=$("$MUSOQ_EXE" --version 2>/dev/null)
+  if [[ $installedOutput =~ Musoq[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+    installedVersion="${BASH_REMATCH[1]}.0"
+    installedVersionTriple="${BASH_REMATCH[1]}"
+    echo "Installed version: $installedVersion"
+    if [ -n "$VERSION" ]; then
+      normInstalled=$(normalize_version $installedVersion)
+      normRequested=$(normalize_version $VERSION)
+      if [[ $normInstalled == $normRequested* ]]; then
+        echo "Musoq version $normRequested is already installed ($installedVersion)."
+        exit 0
+      fi
+    fi
+  else
+    echo "Could not parse installed version."
+    exit 0
+  fi
+fi
+
+repoOwner="Puchaczov"
+repoName="Musoq.CLI"
+apiUrl="https://api.github.com/repos/$repoOwner/$repoName/releases"
+
+echo "Fetching releases from $apiUrl..."
+releases=$(curl -sL "$apiUrl") || { echo "Failed to fetch releases."; exit 1; }
+if [ -z "$releases" ]; then
+  echo "No releases found."
+  exit 1
+fi
+
+# Determine release: if a version is provided, filter for it; else, use the latest proper release.
+if [ -n "$VERSION" ]; then
+  normVersion=$(normalize_version $VERSION github)
+  release=$(echo "$releases" | jq -r --arg ver "$normVersion" 'map(select(.tag_name | ltrimstr("v") == $ver)) | .[0]')
+  if [ "$release" == "null" ] || [ -z "$release" ]; then
+    echo "Release version $normVersion not found on GitHub."
+    exit 1
+  fi
+else
+  # Modified jq query to properly sort semantic versions
+  release=$(echo "$releases" | jq -r '
+    map(select(.tag_name|test("^[0-9]+\\.[0-9]+\\.[0-9]+$")))
+    | sort_by(
+        .tag_name | split(".")
+        | map(tonumber)
+        | .[0] * 1000000 + .[1] * 1000 + .[2]
+    )
+    | reverse | .[0]
+  ')
+fi
+
+releaseTag=$(echo "$release" | jq -r '.tag_name')
+echo "Selected release: $releaseTag"
+
+# If no specific version was requested, compare installed vs latest
+if [ -z "$VERSION" ] && [ -n "$installedVersionTriple" ]; then
+  latestVersion=$(echo "$releaseTag" | sed 's/^v//')
+  # Use normalize_version to ensure proper comparison
+  normInstalled=$(normalize_version "$installedVersionTriple")
+  normLatest=$(normalize_version "$latestVersion")
+  if dpkg --compare-versions "$normInstalled" ge "$normLatest"; then
+    echo "No installation needed. Installed version ($installedVersionTriple) is up to date."
+    exit 0
+  else
+    echo "Update available: $installedVersionTriple -> $latestVersion"
+  fi
+fi
+
+# Select asset: looking for appropriate Linux version
+assetUrl=$(echo "$release" | jq -r --arg arch "$ARCH" '.assets[] | select(.name | test("linux-" + $arch)) | .browser_download_url' | head -n 1)
+if [ -z "$assetUrl" ]; then
+  echo "No Linux $ARCH asset found in the selected release."
+  exit 1
+fi
+echo "Selected asset URL: $assetUrl"
+
+# Prepare download cache and temporary extraction directory
+cacheDir="/tmp/MusoqCache"
+mkdir -p "$cacheDir"
+assetName=$(basename "$assetUrl")
+cacheFile="$cacheDir/$assetName"
+
+download_asset "$assetUrl" "$cacheFile"
+
+tempExtractDir=$(mktemp -d /tmp/MusoqTemp.XXXXXX)
+trap 'rm -rf "$tempExtractDir"; rm -f "$cacheFile"' EXIT
+
+echo "Extracting contents to temporary location: $tempExtractDir"
+if [[ "$assetName" == *.zip ]]; then
+  unzip -q "$cacheFile" -d "$tempExtractDir" || { echo "Extraction failed"; exit 1; }
+elif [[ "$assetName" == *.tar.gz ]]; then
+  tar -xzf "$cacheFile" -C "$tempExtractDir" || { echo "Extraction failed"; exit 1; }
+else
+  echo "Unsupported archive format: $assetName"
+  exit 1
+fi
+
+if [ ! -f "$tempExtractDir/Musoq" ]; then
+  echo "Invalid archive contents: Musoq binary not found."
+  exit 1
+fi
+
+# Stop any running instance if exists
+if [ -x "$MUSOQ_EXE" ]; then
+  stop_musoq
+fi
+
+# Install new version
+if [ -d "$INSTALL_DIR" ]; then
+  echo "Removing existing installation..."
+  rm -rf "$INSTALL_DIR"
+fi
+mkdir -p "$INSTALL_DIR"
+cp -r "$tempExtractDir/"* "$INSTALL_DIR/"
+
+# Ensure executable permission
+chmod +x "$INSTALL_DIR/Musoq"
+
+# Create symlink in /usr/local/bin if not exists
+if [ ! -L "/usr/local/bin/Musoq" ]; then
+  ln -s "$INSTALL_DIR/Musoq" /usr/local/bin/Musoq
+fi
+
+echo "Musoq installation completed successfully."
+echo "Musoq.CLI version $releaseTag was installed and is available in PATH."
+
+# Update current terminal PATH to include the installation folder if not already present.
+if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    export PATH="$INSTALL_DIR:$PATH"
+    hash -r
+    echo "Updated PATH in the current session."
+fi
+
+# Create /etc/profile.d/musoq.sh to add the installation folder to PATH for future sessions.
+echo "export PATH=\"$INSTALL_DIR:\$PATH\"" > /etc/profile.d/musoq.sh
+chmod +x /etc/profile.d/musoq.sh
