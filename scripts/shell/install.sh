@@ -218,6 +218,9 @@ if [ ! -L "/usr/local/bin/Musoq" ]; then
   ln -s "$INSTALL_DIR/Musoq" /usr/local/bin/Musoq
 fi
 
+# Set full permissions on installation directory
+chmod -R 777 "$INSTALL_DIR"
+
 echo "Musoq installation completed successfully."
 echo "Musoq.CLI version $releaseTag was installed and is available in PATH."
 
