@@ -213,6 +213,13 @@ cp -r "$tempExtractDir/"* "$INSTALL_DIR/"
 # Ensure executable permission
 chmod +x "$INSTALL_DIR/Musoq"
 
+# Maintain proper privileges on existing DataSources folder
+if [ -d "$INSTALL_DIR/DataSources" ]; then
+  chmod -R 777 "$INSTALL_DIR/DataSources"
+else
+  echo "Warning: DataSources folder not found in $INSTALL_DIR."
+fi
+
 # Create symlink in /usr/local/bin if not exists
 if [ ! -L "/usr/local/bin/Musoq" ]; then
   ln -s "$INSTALL_DIR/Musoq" /usr/local/bin/Musoq

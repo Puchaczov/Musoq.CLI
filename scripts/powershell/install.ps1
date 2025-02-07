@@ -183,6 +183,20 @@ try {
 
         Get-ChildItem -Path $tempExtractDir | Copy-Item -Destination $installDir -Recurse -Force
 
+        # Maintain proper privileges on existing DataSources folder
+        $dataSources = Join-Path $installDir "DataSources"
+        if (Test-Path $dataSources) {
+            $folderPath = $dataSources
+            $acl = Get-Acl $folderPath
+            $identity = New-Object System.Security.Principal.SecurityIdentifier("S-1-1-0")  # SID for "Everyone"
+            $accessRule = New-Object System.Security.AccessControl.FileSystemAccessRule($identity, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
+            $acl.SetAccessRule($accessRule)
+            Set-Acl $folderPath $acl -ErrorAction Stop
+        }
+        else {
+            Write-Host "Warning: DataSources folder not found in $installDir."
+        }
+
         $currentPath = [Environment]::GetEnvironmentVariable("Path", [EnvironmentVariableTarget]::Machine)
         if (-not ($currentPath.Split(';') -contains $installDir)) {
             Write-Host "Adding $installDir to system PATH..."
