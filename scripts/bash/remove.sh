@@ -6,6 +6,12 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Ensure script is run with bash
+if [ -z "$BASH_VERSION" ]; then
+  echo "Please run this script with bash instead of sh."
+  exit 1
+fi
+
 DEBUG=0
 
 # Parse options: -d for debug
