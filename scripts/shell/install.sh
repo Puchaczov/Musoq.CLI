@@ -225,6 +225,11 @@ if [ ! -L "/usr/local/bin/Musoq" ]; then
   ln -s "$INSTALL_DIR/Musoq" /usr/local/bin/Musoq
 fi
 
+# Create lowercase symlink in /usr/local/bin if not exists
+if [ ! -L "/usr/local/bin/musoq" ]; then
+  ln -s "$INSTALL_DIR/Musoq" /usr/local/bin/musoq
+fi
+
 # Set full permissions on installation directory
 chmod -R 777 "$INSTALL_DIR"
 

@@ -43,6 +43,13 @@ else
   echo "Symlink /usr/local/bin/Musoq does not exist."
 fi
 
+if [ -L "/usr/local/bin/musoq" ]; then
+  echo "Removing symlink /usr/local/bin/musoq"
+  rm "/usr/local/bin/musoq"
+else
+  echo "Symlink /usr/local/bin/musoq does not exist."
+fi
+
 if [ -f "/etc/profile.d/musoq.sh" ]; then
   echo "Removing profile script /etc/profile.d/musoq.sh"
   rm "/etc/profile.d/musoq.sh"
