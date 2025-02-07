@@ -25,13 +25,13 @@ irm https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/script
 Shell using curl:
 
 ```shell
-curl -fsSL https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/powershell/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/shell/install.sh | sh
 ```
 
 Shell using wget:
 
 ```shell
-wget -qO- https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/powershell/install.sh | sh
+wget -qO- https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/shell/install.sh | sh
 ```
 
 Bash:
