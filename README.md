@@ -25,13 +25,13 @@ irm https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/script
 Shell using curl:
 
 ```shell
-curl -fsSL https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/shell/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/bash/install.sh | sudo bash
 ```
 
 Shell using wget:
 
 ```shell
-wget -qO- https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/shell/install.sh | sudo bash
+wget -qO- https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/bash/install.sh | sudo bash
 ```
 
 Bash:
@@ -47,13 +47,13 @@ irm https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/script
 Shell using curl:
 
 ```shell
-curl -fsSL https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/shell/remove.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/bash/remove.sh | sudo bash
 ```
 
 Shell using wget:
 
 ```shell
-wget -qO- https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/shell/remove.sh | sudo sh
+wget -qO- https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/bash/remove.sh | sudo sh
 ```
 
 ### With Server In Background
