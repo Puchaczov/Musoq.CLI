@@ -32,14 +32,70 @@ done
 
 [ $DEBUG -eq 1 ] && set -x
 
+get_os() {
+  if [ -f /etc/alpine-release ]; then
+    echo "alpine"
+  elif [ -f /etc/debian_version ]; then
+    echo "debian"
+  elif [ -f /etc/redhat-release ]; then
+    echo "redhat"
+  elif [ -f /etc/arch-release ]; then
+    echo "arch"
+  else
+    echo "linux"
+  fi
+}
+
 check_dependencies() {
-  for cmd in curl jq unzip uname; do
+  # Check for universal command-line tools
+  for cmd in curl jq unzip uname tar; do
     if ! command -v $cmd >/dev/null 2>&1; then
       echo "Missing dependency: $cmd. Please install it and retry."
       exit 1
     fi
   done
+
+  # Check for and install OS-specific dependencies
+  local os=$(get_os)
+  echo "Detected OS: $os"
+  
+  case $os in
+    alpine)
+      echo "Installing dependencies for Alpine Linux..."
+      apk add --no-cache libstdc++ libgcc icu-libs || {
+        echo "Failed to install dependencies on Alpine Linux."
+        exit 1
+      }
+      ;;
+    debian)
+      echo "Installing dependencies for Debian/Ubuntu..."
+      apt-get update && apt-get install -y libicu-dev || {
+        echo "Failed to install dependencies on Debian/Ubuntu."
+        exit 1
+      }
+      ;;
+    redhat)
+      echo "Installing dependencies for Red Hat/CentOS/Fedora..."
+      if command -v dnf >/dev/null 2>&1; then
+        dnf install -y libicu || { echo "Failed to install dependencies using dnf."; exit 1; }
+      elif command -v yum >/dev/null 2>&1; then
+        yum install -y libicu || { echo "Failed to install dependencies using yum."; exit 1; }
+      else
+        echo "Neither dnf nor yum package manager found."; exit 1
+      fi
+      ;;
+    arch)
+      echo "Installing dependencies for Arch Linux..."
+      pacman -Sy --noconfirm icu || {
+        echo "Failed to install dependencies on Arch Linux."; exit 1
+      }
+      ;;
+    *)
+      echo "Unknown OS: $os. You may need to manually install ICU libraries."
+      ;;
+  esac
 }
+
 check_dependencies
 
 # Get system architecture
@@ -58,6 +114,8 @@ if [ "$ARCH" = "unsupported" ]; then
   exit 1
 fi
 echo "Detected architecture: $ARCH"
+
+OS=$(get_os)
 
 # Functions
 normalize_version() {
@@ -169,9 +227,9 @@ if [ -z "$VERSION" ] && [ -n "$installedVersionTriple" ]; then
 fi
 
 # Select asset: looking for appropriate Linux version
-assetUrl=$(echo "$release" | jq -r --arg arch "$ARCH" '.assets[] | select(.name | test("linux-" + $arch)) | .browser_download_url' | head -n 1)
+assetUrl=$(echo "$release" | jq -r --arg arch "$ARCH" --arg os "$OS" '.assets[] | select(.name | test($os + "-" + $arch)) | .browser_download_url' | head -n 1)
 if [ -z "$assetUrl" ]; then
-  echo "No Linux $ARCH asset found in the selected release."
+  echo "No $OS $ARCH asset found in the selected release."
   exit 1
 fi
 echo "Selected asset URL: $assetUrl"
