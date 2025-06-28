@@ -306,6 +306,17 @@ fi
 # Set full permissions on installation directory
 chmod -R 777 "$INSTALL_DIR"
 
+# Create /usr/share/Musoq directory for user data and set permissions
+USER_DATA_DIR="/usr/share/Musoq"
+if [ ! -d "$USER_DATA_DIR" ]; then
+  echo "Creating user data directory: $USER_DATA_DIR"
+  mkdir -p "$USER_DATA_DIR"
+fi
+# Set directory permissions: 755 (rwxr-xr-x) - users can read/access, owner can write
+chmod 755 "$USER_DATA_DIR"
+# Make it writable by all users for data files
+chmod g+w,o+w "$USER_DATA_DIR"
+
 echo "Musoq installation completed successfully."
 echo "Musoq.CLI version $releaseTag was installed and is available in PATH."
 
