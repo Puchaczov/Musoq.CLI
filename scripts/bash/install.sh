@@ -317,6 +317,16 @@ chmod 755 "$USER_DATA_DIR"
 # Make it writable by all users for data files
 chmod g+w,o+w "$USER_DATA_DIR"
 
+# Create /tmp/AgentLocal directory for temporary data and set permissions
+AGENT_LOCAL_DIR="/tmp/AgentLocal"
+if [ ! -d "$AGENT_LOCAL_DIR" ]; then
+  echo "Creating agent local directory: $AGENT_LOCAL_DIR"
+  mkdir -p "$AGENT_LOCAL_DIR"
+fi
+# Set directory permissions: 755 initially, then add write permissions for all users
+chmod 755 "$AGENT_LOCAL_DIR"
+chmod g+w,o+w "$AGENT_LOCAL_DIR"
+
 echo "Musoq installation completed successfully."
 echo "Musoq.CLI version $releaseTag was installed and is available in PATH."
 
