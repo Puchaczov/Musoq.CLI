@@ -323,9 +323,8 @@ if [ ! -d "$AGENT_LOCAL_DIR" ]; then
   echo "Creating agent local directory: $AGENT_LOCAL_DIR"
   mkdir -p "$AGENT_LOCAL_DIR"
 fi
-# Set directory permissions: 755 initially, then add write permissions for all users
-chmod 755 "$AGENT_LOCAL_DIR"
-chmod g+w,o+w "$AGENT_LOCAL_DIR"
+# Set full permissions for AgentLocal (needs to store and execute .dll files)
+chmod 777 "$AGENT_LOCAL_DIR"
 
 # Create /tmp/AgentLocal/DataSources directory for data sources and set permissions
 DATASOURCES_DIR="/tmp/AgentLocal/DataSources"
@@ -333,9 +332,8 @@ if [ ! -d "$DATASOURCES_DIR" ]; then
   echo "Creating data sources directory: $DATASOURCES_DIR"
   mkdir -p "$DATASOURCES_DIR"
 fi
-# Set directory permissions: 755 initially, then add write permissions for all users
-chmod 755 "$DATASOURCES_DIR"
-chmod g+w,o+w "$DATASOURCES_DIR"
+# Set full permissions for DataSources (needs to store and execute .dll files)
+chmod 777 "$DATASOURCES_DIR"
 
 echo "Musoq installation completed successfully."
 echo "Musoq.CLI version $releaseTag was installed and is available in PATH."
