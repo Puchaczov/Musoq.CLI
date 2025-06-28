@@ -319,19 +319,19 @@ chmod g+w,o+w "$USER_DATA_DIR"
 
 # Create /tmp/AgentLocal directory for temporary data and set permissions
 AGENT_LOCAL_DIR="/tmp/AgentLocal"
-if [ ! -d "$AGENT_LOCAL_DIR" ]; then
-  echo "Creating agent local directory: $AGENT_LOCAL_DIR"
-  mkdir -p "$AGENT_LOCAL_DIR"
+if [ -d "$AGENT_LOCAL_DIR" ]; then
+  echo "Clearing existing agent local directory: $AGENT_LOCAL_DIR"
+  rm -rf "$AGENT_LOCAL_DIR"
 fi
+echo "Creating agent local directory: $AGENT_LOCAL_DIR"
+mkdir -p "$AGENT_LOCAL_DIR"
 # Set full permissions for AgentLocal (needs to store and execute .dll files)
 chmod 777 "$AGENT_LOCAL_DIR"
 
 # Create /tmp/AgentLocal/DataSources directory for data sources and set permissions
 DATASOURCES_DIR="/tmp/AgentLocal/DataSources"
-if [ ! -d "$DATASOURCES_DIR" ]; then
-  echo "Creating data sources directory: $DATASOURCES_DIR"
-  mkdir -p "$DATASOURCES_DIR"
-fi
+echo "Creating data sources directory: $DATASOURCES_DIR"
+mkdir -p "$DATASOURCES_DIR"
 # Set full permissions for DataSources (needs to store and execute .dll files)
 chmod 777 "$DATASOURCES_DIR"
 
