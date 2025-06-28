@@ -63,4 +63,20 @@ else
   echo "Profile script /etc/profile.d/musoq.sh not found."
 fi
 
+# Remove user data directory
+if [ -d "/usr/share/Musoq" ]; then
+  echo "Removing user data directory: /usr/share/Musoq"
+  rm -rf "/usr/share/Musoq"
+else
+  echo "User data directory /usr/share/Musoq does not exist."
+fi
+
+# Remove agent local directory
+if [ -d "/tmp/AgentLocal" ]; then
+  echo "Removing agent local directory: /tmp/AgentLocal"
+  rm -rf "/tmp/AgentLocal"
+else
+  echo "Agent local directory /tmp/AgentLocal does not exist."
+fi
+
 echo "Musoq removal completed."
