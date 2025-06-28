@@ -227,9 +227,19 @@ if [ -z "$VERSION" ] && [ -n "$installedVersionTriple" ]; then
 fi
 
 # Select asset: looking for appropriate Linux version
-assetUrl=$(echo "$release" | jq -r --arg arch "$ARCH" --arg os "$OS" '.assets[] | select(.name | test($os + "-" + $arch)) | .browser_download_url' | head -n 1)
+# Map OS to asset naming convention
+case $OS in
+  alpine)
+    ASSET_OS="alpine"
+    ;;
+  *)
+    ASSET_OS="linux"
+    ;;
+esac
+
+assetUrl=$(echo "$release" | jq -r --arg arch "$ARCH" --arg os "$ASSET_OS" '.assets[] | select(.name | test($os + "-" + $arch)) | .browser_download_url' | head -n 1)
 if [ -z "$assetUrl" ]; then
-  echo "No $OS $ARCH asset found in the selected release."
+  echo "No $ASSET_OS $ARCH asset found in the selected release."
   exit 1
 fi
 echo "Selected asset URL: $assetUrl"
