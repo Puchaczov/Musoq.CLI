@@ -214,7 +214,7 @@ wget -qO- https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/
 |----------|-----------------|
 | Settings file | `~/.musoq/settings.json` |
 | Python plugins | `~/.musoq/Python/Scripts/` |
-| Environment variables | `~/.musoq/environment-variables.json` |
+| Environment variables | `~/.musoq/appsettings.json` |
 | Tools | `~/.musoq/Tools/` |
 
 ---
@@ -552,7 +552,7 @@ musoq get environment-variables-file-path
 
 **Expected Output:**
 ```
-~/.musoq/environment-variables.json
+~/.musoq/appsettings.json
 ```
 
 </details>
@@ -623,7 +623,7 @@ Set environment variables for data source plugins and tools.
 
 **Command:**
 ```bash
-musoq set environment-variable "API_TOKEN" "secret-token-value"
+musoq set environment-variable --name "API_TOKEN" --value "secret-token-value"
 ```
 
 **Expected Output:**
@@ -682,7 +682,7 @@ s.Value,Len
 ```bash
 echo "Line 1
 Line 2
-Line 3" | musoq run "select Count(*) as LineCount from #stdin.TextBlock() t cross apply t.SplitByNewLines(t.Value) s" --format csv
+Line 3" | musoq run "select Count(s.Value) as LineCount from #stdin.TextBlock() t cross apply t.SplitByNewLines(t.Value) s" --format csv
 ```
 
 **Expected Output:**
@@ -711,9 +711,9 @@ Bob 35" | musoq run "select r.name, r.age from #stdin.Regex('(?<name>\w+)\s+(?<a
 **Expected Output:**
 ```
 r.name,r.age
-John,30
-Alice,25
-Bob,35
+"John","30"
+"Alice","25"
+"Bob","35"
 ```
 
 </details>
@@ -798,8 +798,8 @@ Charlie 28" | musoq run "select r.name, r.age from #stdin.Regex('(?<name>\w+)\s+
 **Expected Output:**
 ```
 r.name,r.age
-John,30
-Bob,35
+"John","30"
+"Bob","35"
 ```
 
 </details>
@@ -838,9 +838,9 @@ See https://github.com/user/repo" | musoq run "select r.protocol, r.domain from 
 **Expected Output:**
 ```
 r.protocol,r.domain
-https,www.example.com
-http,test.org
-https,github.com
+"https","www.example.com"
+"http","test.org"
+"https","github.com"
 ```
 
 </details>
@@ -880,8 +880,8 @@ Alice 25 Manager" | musoq run "select r.name, r.column2, r.role from #stdin.Rege
 **Expected Output:**
 ```
 r.name,r.column2,r.role
-John,30,Developer
-Alice,25,Manager
+|"John","30","Developer"
+"Alice","25","Manager"
 ```
 
 **Note:** All extracted values are strings. Use conversion functions like `ToInt32()`, `ToDateTime()`, etc., when you need to perform operations requiring specific types.
@@ -1437,22 +1437,19 @@ Template variables use the `{{ column_name }}` syntax to access values from quer
 
 **Command:**
 ```bash
-musoq run "select 'John' as name, 30 as age from #system.dual()" --execute "echo Hello {{ name }}, you are {{ age }} years old" --format json
+musoq run "select 'John' as name, 30 as age from #system.dual()" --execute "echo Hello {{ name }}, you are {{ age }} years old" --format csv
 ```
 
 **Expected Output:**
-```json
-[{
-  "name": "John",
-  "age": 30,
-  "Expression": "echo Hello John, you are 30 years old",
-  "Result": "Hello John, you are 30 years old"
-}]
+```csv
+name,age,Expression,Result
+John,30,"echo Hello John, you are 30 years old","Hello John, you are 30 years old"
 ```
 
 - Executes a command template for each row
 - Replaces `{{ name }}` with "John" and `{{ age }}` with "30"
 - Adds the evaluated expression and its result as new columns
+- Works only with table and csv format
 
 ---
 
