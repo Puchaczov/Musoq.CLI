@@ -61,28 +61,35 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
 $installDir = Join-Path $env:ProgramFiles "Musoq"
 $musoqExe = Join-Path $installDir "Musoq.exe"
 
+$installedVersion = "0.0.0.0"
+$installedVersionTriple = "0.0.0.0"
+
 if (Test-Path $musoqExe) {
     Write-Debug "Found existing Musoq installation, checking version..."
-    $output = & $musoqExe "--version"
-    if ($output -match 'Musoq\s+(\d+\.\d+\.\d+)') {  # Updated regex pattern
-        $installedVersion = $Matches[1] + ".0"  # Append .0 for 4-part version
-        $installedVersionTriple = $Matches[1]  # Store three-part version for comparisons
-        Write-Debug "Installed version: $installedVersion"
-        
-        if ($Version) {
-            $normalizedInstalled = $installedVersion
-            $normalizedRequested = NormalizeVersion $Version
-            Write-Debug "Comparing versions: Installed=$normalizedInstalled, Requested=$normalizedRequested"
+    try {
+        $output = & $musoqExe "--version" 2>&1
+        if ($LASTEXITCODE -eq 0 -and $output -match 'Musoq\s+(\d+\.\d+\.\d+)') {
+            $installedVersion = $Matches[1] + ".0"  # Append .0 for 4-part version
+            $installedVersionTriple = $Matches[1]  # Store three-part version for comparisons
+            Write-Debug "Installed version: $installedVersion"
             
-            if ($normalizedInstalled.StartsWith($normalizedRequested)) {
-                Write-Host "Musoq version $normalizedRequested is already installed ($installedVersion)."
-                exit 0
+            if ($Version) {
+                $normalizedInstalled = $installedVersion
+                $normalizedRequested = NormalizeVersion $Version
+                Write-Debug "Comparing versions: Installed=$normalizedInstalled, Requested=$normalizedRequested"
+                
+                if ($normalizedInstalled.StartsWith($normalizedRequested)) {
+                    Write-Host "Musoq version $normalizedRequested is already installed ($installedVersion)."
+                    exit 0
+                }
             }
         }
-    }
-    else{
-        Write-Debug "Could not parse installed version from output: $output"
-        exit 0
+        else {
+            Write-Debug "Could not parse installed version from output or command failed. Assuming version 0.0.0"
+            Write-Debug "Output: $output, Exit code: $LASTEXITCODE"
+        }
+    } catch {
+        Write-Debug "Error while checking installed version: $($_.Exception.Message). Assuming version 0.0.0"
     }
 }
 
@@ -235,3 +242,6 @@ try {
         Remove-Item -Path $tempZip -Force
     }
 }
+
+Write-Host "`nPress Enter to close this window..."
+Read-Host
