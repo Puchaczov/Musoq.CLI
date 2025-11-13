@@ -57,3 +57,6 @@ if ($currentPath.Split(';') -contains $installDir) {
 }
 
 Write-Host "Musoq has been successfully removed."
+
+Write-Host "`nPress Enter to close this window..."
+Read-Host

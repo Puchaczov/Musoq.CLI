@@ -156,10 +156,15 @@ download_asset() {
 INSTALL_DIR="/opt/Musoq"
 MUSOQ_EXE="$INSTALL_DIR/Musoq"
 
+# Initialize version variables
+installedVersion="0.0.0.0"
+installedVersionTriple="0.0.0.0"
+
 # If Musoq is already installed, check version
 if [ -x "$MUSOQ_EXE" ]; then
   installedOutput=$("$MUSOQ_EXE" --version 2>/dev/null)
-  if [[ $installedOutput =~ Musoq[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+  exitCode=$?
+  if [ $exitCode -eq 0 ] && [[ $installedOutput =~ Musoq[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+) ]]; then
     installedVersion="${BASH_REMATCH[1]}.0"
     installedVersionTriple="${BASH_REMATCH[1]}"
     echo "Installed version: $installedVersion"
@@ -172,8 +177,8 @@ if [ -x "$MUSOQ_EXE" ]; then
       fi
     fi
   else
-    echo "Could not parse installed version."
-    exit 0
+    echo "Could not parse installed version from output or command failed. Assuming version 0.0.0.0"
+    [ $DEBUG -eq 1 ] && echo "Output: $installedOutput, Exit code: $exitCode"
   fi
 fi
 
