@@ -1,4 +1,4 @@
-# Musoq CLI Cookbook
+# Musoq CLI
 
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Puchaczov/Musoq.CLI/blob/main/LICENSE)
 
@@ -75,2263 +75,2109 @@ wget -qO- https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/
    - Windows & Linux: `Musoq run query "select 1 from #system.dual()"`
 5. 🛑 To quit the server: `Musoq quit`
 
+# Musoq Server & CLI Specification
+
 ---
 
 ## Table of Contents
 
-- [Quick Reference](#quick-reference)
-- [Server Management](#server-management)
-  - [Start Server](#start-server)
-  - [Stop Server](#stop-server)
-- [Query Execution - Basics](#query-execution---basics)
-  - [Basic Query Execution](#basic-query-execution)
-  - [Output Formats](#output-formats)
-  - [Expression-Only Queries](#expression-only-queries)
-  - [Running Queries from Files](#running-queries-from-files)
-- [Information Retrieval](#information-retrieval)
-  - [Get Data Sources](#get-data-sources)
-  - [Get Server Version](#get-server-version)
-  - [Check Server Status](#check-server-status)
-  - [Get Server Port](#get-server-port)
-  - [Get Environment Variables](#get-environment-variables)
-  - [Get Environment Variables File Path](#get-environment-variables-file-path)
-  - [Get Licenses](#get-licenses)
-- [Local Configuration](#local-configuration)
-  - [Setting Environment Variables](#setting-environment-variables)
-  - [Setting Agent Configuration](#setting-agent-configuration)
-  - [Clearing Configuration Values](#clearing-configuration-values)
-- [Advanced Query Features](#advanced-query-features)
-  - [Piped Text Processing](#piped-text-processing)
-  - [Regex Pattern Matching](#regex-pattern-matching)
-  - [JSON Flattening and Processing](#json-flattening-and-processing)
-  - [YAML Flattening and Processing](#yaml-flattening-and-processing)
-  - [Post-Processing with --execute](#post-processing-with---execute)
-- [Bucket Management](#bucket-management)
-  - [Create Bucket](#create-bucket)
-  - [Delete Bucket](#delete-bucket)
-  - [Using Buckets in Queries](#using-buckets-in-queries)
-- [Python Plugin Management](#python-plugin-management)
-  - [List Python Plugins](#list-python-plugins)
-  - [Read Python Plugin](#read-python-plugin)
-  - [Create Python Plugin](#create-python-plugin)
-  - [Rename Python Plugin](#rename-python-plugin)
-  - [Delete Python Plugin](#delete-python-plugin)
-  - [Show Plugin Directory](#show-plugin-directory)
-  - [Using Python Plugins in Queries](#using-python-plugins-in-queries)
-- [Tool Management](#tool-management)
-  - [List Tools](#list-tools)
-  - [Show Tool Details](#show-tool-details)
-  - [Execute Tool](#execute-tool)
-  - [Tool YAML File Format](#tool-yaml-file-format)
-- [Logging and History](#logging-and-history)
-  - [View Query History](#view-query-history)
-  - [Limit Log Output](#limit-log-output)
-  - [View Timestamps and Duration](#view-timestamps-and-duration)
-- [Base64 Encoding](#base64-encoding)
-  - [Encode Image to Base64](#encode-image-to-base64)
-- [Troubleshooting](#troubleshooting)
+1. [Introduction](#1-introduction)
+2. [Architecture Overview](#2-architecture-overview)
+3. [Installation & Environment](#3-installation--environment)
+4. [Server Commands](#4-server-commands)
+5. [Query Execution](#5-query-execution)
+6. [Data Source Management](#6-data-source-management)
+7. [Python Plugin Development](#7-python-plugin-development)
+8. [Tool Management](#8-tool-management)
+9. [Scripts Management](#9-scripts-management)
+10. [Registry Management](#10-registry-management)
+11. [Configuration Management](#11-configuration-management)
+12. [Bucket Management](#12-bucket-management)
+13. [Utility Commands](#13-utility-commands)
+14. [API Reference](#14-api-reference)
+15. [Exit Codes & Error Handling](#15-exit-codes--error-handling)
+16. [Configuration Files](#16-configuration-files)
+17. [Security Considerations](#17-security-considerations)
 
 ---
 
-## Quick Reference
+## 1. Introduction
 
-### Common Commands
+### 1.1 Purpose
 
-| Task | Command |
-|------|---------|
-| Run simple query | `musoq run "SELECT 1 FROM #system.dual()"` |
-| Run query as JSON | `musoq run "SELECT 1 FROM #system.dual()" --format json` |
-| Run query as CSV | `musoq run "SELECT 1 FROM #system.dual()" --format csv` |
-| Run query from file | `musoq run query.sql` |
-| Run query with command execution | `musoq run "SELECT 1 as Test FROM #system.dual()" --execute "powershell -command 1+2"` |
-| Process piped text | `echo "data" \| musoq run "SELECT * FROM #stdin.TextBlock()"` |
-| Flatten JSON from stdin | `echo '{"key":"value"}' \| musoq run "SELECT * FROM #stdin.JsonFlat()"` |
-| Flatten YAML from stdin | `echo 'key: value' \| musoq run "SELECT * FROM #stdin.YamlFlat()"` |
-| Convert YAML to JSON | `echo 'key: value' \| musoq run "SELECT y.Path, y.Value FROM #stdin.YamlFlat() y" --format interpreted_json` |
-| Convert JSON to YAML | `echo '{"key":"value"}' \| musoq run "SELECT j.Path, j.Value FROM #stdin.JsonFlat() j" --format yaml` |
-| Set environment variable | `musoq set environment-variable "VAR_NAME" "value"` |
-| Set agent name | `musoq set agent-name "my-agent"` |
-| List tools | `musoq tool list` |
-| Show tool details | `musoq tool show tool-name` |
-| Execute tool | `musoq tool execute tool-name --param1 value1` |
-| List Python plugins | `musoq python list` |
-| Create Python plugin | `musoq python create plugin_name [template]` |
-| Read Python plugin | `musoq python read plugin_name` |
-| Rename Python plugin | `musoq python update old_name new_name` |
-| Delete Python plugin | `musoq python delete plugin_name` |
-| Show plugins folder | `musoq python folder` |
-| Get data sources | `musoq get data-sources` |
-| Check server status | `musoq get is-running` |
-| Get environment variables | `musoq get environment-variables` |
-| Create bucket | `musoq bucket create bucket-name` |
-| View query history | `musoq log` |
-| Encode image | `musoq image encode file.png` |
-| Start server | `musoq serve` |
-| Start server (foreground) | `musoq serve --wait-until-exit` |
-| Stop server | `musoq quit` |
+This specification defines the Musoq server and command-line interface (CLI). The server provides a local execution environment for Musoq SQL queries, enabling developers to query diverse data sources through a unified interface.
 
-### Output Formats
+### 1.2 Scope
 
-| Format | Flag | Options | Use Case |
-|--------|------|---------|----------|
-| Table (default) | None or `--format table` | `--execute` | Human-readable output |
-| JSON | `--format json` | `--execute` | API integration, parsing |
-| CSV | `--format csv` | `--unquoted`, `--no-header`, `--execute` | Excel, data analysis |
-| Raw | `--format raw` | `--execute` | Debugging, type inspection |
+This specification covers:
 
-**Note:** The `--execute` option works with all output formats to post-process results with shell commands.
+- CLI command structure and syntax
+- Server lifecycle management
+- Data source plugin management (both .NET and Python)
+- Python plugin development contract
+- Tool definition and execution
+- SQL script management
+- Plugin registry configuration
+- Configuration and environment variables
+- REST API endpoints for programmatic access
+- Error handling and exit codes
+- Configuration file formats
+- Security considerations
 
-### Python Plugin Templates
+### 1.3 Design Philosophy
 
-| Template | Use Case |
-|----------|----------|
-| `basic` | Simple data sources with static or computed data |
-| `api` | REST API-based data sources |
+The Musoq CLI follows these principles:
 
-### Configuration Commands
+- **Discoverability**: Commands are organized hierarchically with consistent patterns
+- **Composability**: Output formats support piping and scripting
+- **Offline-First**: By default, it doesn't connect anywhere, doesn't send any telemetry, can work fully offline
+- **Extensibility**: Plugin architecture for data sources and tools
 
-| Category | Set Command | Clear Command |
-|----------|-------------|---------------|
-| Environment Variable | `set environment-variable NAME VALUE` | `clear environment-variable NAME` |
-| Log Path | `set log-path PATH` | `clear log-path` |
+### 1.4 Command Structure
 
-### Common Data Sources
+All CLI commands follow this general pattern:
 
-| Data Source | Syntax | Example |
-|-------------|--------|---------|
-| System dual | `#system.dual()` | `SELECT 1 FROM #system.dual()` |
-| Files | `#system.files(path, recursive)` | `SELECT Name FROM #system.files('C:\\', false)` |
-| Directories | `#system.directory(path, recursive)` | `SELECT Name FROM #system.directory('C:\\', false)` |
-| Stdin text | `#stdin.TextBlock()` | `SELECT Value FROM #stdin.TextBlock()` |
-| Stdin regex | `#stdin.Regex(pattern)` | `SELECT r.name, r.age FROM #stdin.Regex('(?<name>\w+)\s+(?<age>\d+)') r` |
-| Stdin JSON | `#stdin.JsonFlat()` | `SELECT j.Path, j.Value FROM #stdin.JsonFlat() j` |
-| Stdin YAML | `#stdin.YamlFlat()` | `SELECT y.Path, y.Value FROM #stdin.YamlFlat() y` |
-| Python plugin | `#schema.datasource()` | `SELECT * FROM #mydata.items()` |
+```
+musoq <command> [subcommand] [arguments] [options]
+```
 
-### File Locations
+Commands are case-insensitive. Options use the standard `--option` or `-o` format.
 
-| Resource | Default Location |
-|----------|-----------------|
-| Settings file | `~/.musoq/settings.json` |
-| Python plugins | `~/.musoq/Python/Scripts/` |
-| Environment variables | `~/.musoq/appsettings.json` |
-| Tools | `~/.musoq/Tools/` |
+### 1.5 Terminology
+
+| Term | Definition |
+|------|------------|
+| **Server** | The local server that executes queries and manages plugins |
+| **Data Source** | A plugin that provides access to a specific type of data |
+| **Schema** | The named interface exposed by a data source for SQL queries |
+| **Tool** | A predefined SQL query template with parameters |
+| **Script** | A saved SQL query file |
+| **Registry** | A remote source for discovering and downloading plugins |
+| **Bucket** | An isolated context for query execution with preloaded data |
 
 ---
 
-## Server Management
+## 2. Architecture Overview
 
-<details>
-<summary><h3>Start Server</h3></summary>
+### 2.1 Component Architecture
 
-Start the local Musoq agent server in the background.
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         CLI (musoq)                             │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ Commands: serve, run, datasource, tool, scripts, registry   ││
+│  └─────────────────────────────────────────────────────────────┘│
+└────────────────────────────┬────────────────────────────────────┘
+                             │ HTTP / Named Pipes
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                         API Server                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────────┐ │
+│  │ Controllers  │  │ CQRS Handlers│  │ Query Execution Engine │ │
+│  └──────────────┘  └──────────────┘  └────────────────────────┘ │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      Data Source Plugins                        │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────────────┐  │
+│  │ .NET     │  │ Python   │  │ Built-in │  │ External (.zip) │  │
+│  │ Plugins  │  │ Plugins  │  │ Sources  │  │ Packages        │  │
+│  └──────────┘  └──────────┘  └──────────┘  └─────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-**Command (background mode):**
+### 2.2 Communication Model
+
+The CLI communicates with the API server through:
+
+1. **HTTP REST API**: For management operations
+2. **Named Pipes**: For pipe feeding data into queries
+
+### 2.3 Server Lifecycle
+
+The server operates in two modes:
+
+| Mode | Command | Behavior |
+|------|---------|----------|
+| Background | `musoq serve` | Starts as detached process, returns immediately |
+| Foreground | `musoq serve --wait-until-exit` | Blocks until explicitly stopped |
+
+---
+
+## 3. Installation & Environment
+
+### 3.1 Prerequisites
+
+| Requirement | Version | Purpose |
+|-------------|---------|---------|
+| Python (optional) | 3.12 | Python plugin support via Python.NET |
+
+---
+
+## 4. Server Commands
+
+### 4.1 serve - Start Server
+
+Start the local server.
+
+```
+musoq serve [options]
+```
+
+**Options:**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--wait-until-exit` | Run in foreground, block until stopped | false |
+| `--auto-shutdown` | Enable auto-shutdown after idle period | false |
+| `--is-independent-process` | Internal flag for subprocess mode | false |
+
+**Examples:**
+
 ```bash
+# Start server in background (returns immediately)
 musoq serve
-```
 
-**Command (foreground mode - wait until exit):**
-```bash
+# Start server in foreground (blocks)
 musoq serve --wait-until-exit
+
+# Start with auto-shutdown enabled (shuts down after 10 minutes of inactivity)
+musoq serve --wait-until-exit --auto-shutdown
 ```
 
-- `serve`: Starts the local agent API server as a background process. The server handles query execution, plugin management, and all other operations. The command returns immediately after starting the server.
-- `serve --wait-until-exit`: Starts the server in foreground mode and blocks until the server is explicitly stopped. Useful for debugging or when you want to keep the server running in a terminal session.
-
-**Note:** Most CLI commands require the server to be running. The server starts automatically when needed in many scenarios.
-
-</details>
-
-<details>
-<summary><h3>Stop Server</h3></summary>
-
-Gracefully shut down the running server.
-
-**Command:**
-```bash
-musoq quit
+**Output on Success:**
 ```
-
-**Expected Output:**
-```
-Server shutdown initiated
-```
-
-</details>
-
----
-
-## Query Execution - Basics
-
-<details open>
-<summary><h3>Basic Query Execution</h3></summary>
-
-Execute SQL queries directly from the command line.
-
-**Command:**
-```bash
-musoq run "select 20001 from #system.dual()"
-```
-
-**Expected Output:**
-```
-┌───────┐
-│ 20001 │
-├───────┤
-│ 20001 │
-└───────┘
-```
-
-</details>
-
-<details>
-<summary><h3>Output Formats</h3></summary>
-
-Musoq supports multiple output formats for different use cases.
-
-#### JSON Format
-
-**Command:**
-```bash
-musoq run "select 20002 from #system.dual()" --format json
-```
-
-**Expected Output:**
-```json
-[{"20002":20002}]
-```
-
----
-
-#### CSV Format
-
-**Command:**
-```bash
-musoq run "select 20003 from #system.dual()" --format csv
-```
-
-**Expected Output:**
-```
-20003
-20003
-```
-
-**CSV Options:**
-```bash
-# Unquoted output (no quotes around string values)
-musoq run "select 'text' from #system.dual()" --format csv --unquoted
-
-# No header row
-musoq run "select 20003 from #system.dual()" --format csv --no-header
-```
-
----
-
-#### Raw Format
-
-**Command:**
-```bash
-musoq run "select 20004 from #system.dual()" --format raw
-```
-
-**Expected Output:**
-```
-Columns:
-[{"name":"20004","type":"System.Int32","order":0}]
-Rows:
-[[{"value":20004}]]
-```
-
----
-
-#### Interpreted JSON Format
-
-**Command:**
-```bash
-echo '{"name":"Alice","age":30}' | musoq run "
-  SELECT j.Path, j.Value 
-  FROM #stdin.JsonFlat() j
-" --format interpreted_json
-```
-
-**Expected Output:**
-```json
-[{"name":"Alice","age":30}]
-```
-
----
-
-#### Reconstructed JSON Format
-
-**Command:**
-```bash
-echo '{"user":{"name":"Alice"}}' | musoq run "
-  SELECT j.Path as Path, j.Value as Value
-  FROM #stdin.JsonFlat() j
-" --format reconstructed_json
-```
-
-**Expected Output:**
-```json
-{"user":{"name":"Alice"}}
-```
-
----
-
-#### Interpreted YAML Format
-
-**Command:**
-```bash
-echo '{"name":"Alice","age":30}' | musoq run "
-  SELECT j.Path, j.Value 
-  FROM #stdin.JsonFlat() j
-" --format interpreted_yaml
-```
-
-**Expected Output:**
-```yaml
-- name: Alice
-  age: 30
-```
-
----
-
-#### Reconstructed YAML Format
-
-**Command:**
-```bash
-echo '[{"name":"Alice"},{"name":"Bob"}]' | musoq run "
-  SELECT j.Path as Path, j.Value as Value
-  FROM #stdin.JsonFlat() j
-" --format reconstructed_yaml
-```
-
-**Expected Output:**
-```yaml
-- name: Alice
-- name: Bob
-```
-
-</details>
-
-<details>
-<summary><h3>Expression-Only Queries</h3></summary>
-
-Execute simple expressions without requiring FROM clause syntax.
-
-**Command:**
-```bash
-musoq run "1 + 2"
-```
-
-**Expected Output:**
-```
-┌───────┐
-│ 1 + 2 │
-├───────┤
-│ 3     │
-└───────┘
-```
-
-</details>
-
-<details>
-<summary><h3>Running Queries from Files</h3></summary>
-
-Execute SQL queries stored in files for better organization and reusability.
-
-**Command:**
-```bash
-musoq run path/to/query.sql
-```
-
-**Example query.sql:**
-```sql
-select 20006 from #system.dual()
-```
-
-**Expected Output:**
-```
-┌───────┐
-│ 20006 │
-├───────┤
-│ 20006 │
-└───────┘
-```
-
-</details>
-
----
-
-## Information Retrieval
-
-<details>
-<summary><h3>Get Data Sources</h3></summary>
-
-List all available data sources and their versions.
-
-**Command:**
-```bash
-musoq get data-sources
-```
-
-**Expected Output:**
-```
-Name,Version,FullName
-api,1.1.0.0,Musoq.Cloud.DataSources.ExternalApi
-memorymapped,1.1.0.0,Musoq.Cloud.DataSources.MemoryMapped
-system,6.2.15.0,Musoq.DataSources.System
-```
-
-</details>
-
-<details>
-<summary><h3>Get Server Version</h3></summary>
-
-Check the version of the running Musoq server.
-
-**Command:**
-```bash
-musoq get server-version
-```
-
-**Expected Output:**
-```
-Server version: 1.0.0
-```
-
-</details>
-
-<details>
-<summary><h3>Get Environment Variables</h3></summary>
-
-List all configured environment variables used by plugins.
-
-#### Show Masked Values (default)
-
-**Command:**
-```bash
-musoq get environment-variables
-```
-
-**Expected Output:**
-```
-Name,Value,Assemblies
-TEST_VAR,***cretValue42,"Sample.Tools.Assembly"
-API_KEY,***123,"Musoq.Cloud.DataSources.ExternalApi"
-```
-
----
-
-#### Show Sensitive Values
-
-**Command:**
-```bash
-musoq get environment-variables --show-sensitive true
-```
-
-**Expected Output:**
-```
-Name,Value,Assemblies
-TEST_VAR,SecretValue42,"Sample.Tools.Assembly"
-API_KEY,sk-abc123,"Musoq.Cloud.DataSources.ExternalApi"
-```
-
-</details>
-
-<details>
-<summary><h3>Get Environment Variables File Path</h3></summary>
-
-Display the path to the environment variables configuration file.
-
-**Command:**
-```bash
-musoq get environment-variables-file-path
-```
-
-**Expected Output:**
-```
-~/.musoq/appsettings.json
-```
-
-</details>
-
-<details>
-<summary><h3>Check Server Status</h3></summary>
-
-Verify if the Musoq server is currently running.
-
-**Command:**
-```bash
-musoq get is-running
-```
-
-**Expected Output (when running):**
-```
+███    ███ ██    ██ ███████  ██████   ██████ 
+████  ████ ██    ██ ██      ██    ██ ██    ██
+██ ████ ██ ██    ██ ███████ ██    ██ ██    ██ 
+██  ██  ██ ██    ██      ██ ██    ██ ██ ▄▄ ██
+██      ██  ██████  ███████  ██████   ██████  
+                                         ▀▀   
 Server is up and running
 ```
 
-**Expected Output (when not running):**
+### 4.2 quit - Stop Server
+
+Stop the running Musoq server.
+
 ```
-Server is not running
-```
-
-**Exit codes:**
-- `0` - Server is running
-- `1` - Server is not running
-
-</details>
-
-<details>
-<summary><h3>Get Server Port</h3></summary>
-
-Retrieve the port number the server is listening on.
-
-**Command:**
-```bash
-musoq get server-port
+musoq quit
 ```
 
-**Expected Output:**
-```
-5000
-```
-
-</details>
-
-<details>
-<summary><h3>Get Licenses</h3></summary>
-
-Display license information for dependencies.
-
-**Command:**
-```bash
-musoq get licenses
-```
-
-</details>
+**Exit Codes:**
+- `0`: Server stopped successfully
+- `2`: Server was not running or communication failed
 
 ---
 
-## Local Configuration
+## 5. Query Execution
 
-<details>
-<summary><h3>Setting Environment Variables</h3></summary>
+### 5.1 run - Execute Queries
 
-Set environment variables for data source plugins and tools.
+Execute SQL queries from strings, script names, or files.
 
-**Command:**
+```
+musoq run <input> [options]
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `<input>` | SQL query string, script name, or file path (with `--from-file`) |
+
+**Options:**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--bucket <name>` | Bucket name for query context | None |
+| `--format <format>` | Output format (see table below) | `table` |
+| `--execute <expr>` | Expression to execute on results | None |
+| `--debug` | Show transformed query before execution | false |
+| `--unquoted` | Disable quoting in CSV output | false |
+| `--no-header` | Skip header row in output | false |
+| `--stacktrace` | Include stack trace in error output | false |
+| `--execution-details` | Show execution phase and progress details | false |
+| `--from-file` | Treat input as file path | false |
+
+**Examples:**
+
 ```bash
-musoq set environment-variable --name "API_TOKEN" --value "secret-token-value"
+# Execute inline query
+musoq run "SELECT 1 FROM #system.dual()"
+
+# Execute with JSON output
+musoq run "SELECT * FROM #os.files('.')" --format json
+
+# Execute script by name (looks up in ~/.musoq/Scripts/)
+musoq run my_script
+
+# Execute from file
+musoq run ./queries/analysis.sql --from-file
+
+# Debug mode - shows the actual query sent to the server
+musoq run "SELECT * FROM #os.files('.')" --debug
+
+# Pipe-friendly CSV output without headers
+musoq run "SELECT Name, Size FROM #os.files('.')" --format csv --no-header
+
+# Show execution progress for long-running queries
+musoq run "SELECT * FROM #os.files('/', true)" --execution-details
 ```
 
-**Expected Output:**
+### 5.2 Standard Input Piping
+
+Queries can reference piped data using the `#stdin` schema:
+
+```bash
+# Pipe CSV data
+cat data.csv | musoq run "SELECT * FROM #stdin.csv(true, 0)"
+
+# Pipe JSON data
+cat data.json | musoq run "SELECT * FROM #stdin.json()"
+
+# Chain with other tools
+curl https://api.example.com/data | musoq run "SELECT id, name FROM #stdin.json() WHERE active = true"
 ```
-Environment variable set successfully
-```
+
+### 5.3 Output Formats
+
+| Format | Response Format | Description | Use Case |
+|--------|-----------------|-------------|----------|
+| `table` | raw | ASCII table (default) | Human-readable terminal output |
+| `json` | json | JSON array of objects | API integration, jq processing |
+| `csv` | csv | Comma-separated values | Spreadsheet import, further processing |
+| `yaml` | yaml | YAML format | Configuration files, readability |
+| `raw` | raw | Raw values, newline-separated | Simple scripting |
+| `interpreted_json` | json | Interpreted JSON (preserves structure) | Structured data extraction |
+| `reconstructed_json` | json | Reconstructed JSON (path-value mode) | Flattened JSON output |
+| `interpreted_yaml` | yaml | Interpreted YAML (preserves structure) | Structured data as YAML |
+| `reconstructed_yaml` | yaml | Reconstructed YAML (path-value mode) | Flattened YAML output |
+
+### 5.4 Script Resolution
+
+When the input doesn't look like a SQL query, the CLI attempts to resolve it as a script:
+
+1. Check if input ends with `.sql` - treat as script name
+2. Look up script in `~/.musoq/Scripts/{name}.sql`
+3. If found, execute the script contents
+4. If not found, treat input as a raw query
+
+### 5.5 Query Transformation
+
+The CLI performs the following transformations before execution:
+
+1. **Expression to Query**: Simple expressions like `1 + 1` are wrapped in `SELECT ... FROM #system.dual()`
+2. **Stdin Rewriting**: References to `#stdin` are rewritten with appropriate model configurations for AI extraction
 
 ---
 
-## Advanced Query Features
+## 6. Data Source Management
 
-<details>
-<summary><h3>Piped Text Processing</h3></summary>
+The `datasource` command manages installed data source plugins, including both .NET assemblies and Python scripts.
 
-Process text data piped from stdin using Musoq queries.
+### 6.1 Plugin Types
 
-#### Read and Split Text by Lines
+| Type | Description | Location |
+|------|-------------|----------|
+| `DotNet` | Compiled .NET assemblies | `~/.musoq/DataSources/` |
+| `Python` | Python v.2 plugin projects | `~/.musoq/Python/Scripts/` |
+| `BuiltIn` | Plugins bundled with Musoq | Application directory |
 
-**Command:**
+### 6.2 datasource list
+
+List all installed data sources.
+
+```
+musoq datasource list
+```
+
+**Output Columns:**
+
+| Column | Description |
+|--------|-------------|
+| Name | Data source identifier (used in `datasource show`) |
+| Version | Installed version (semantic versioning) |
+| Type | Plugin type: `DotNet`, `Python`, or `BuiltIn` |
+| Enabled | Whether the data source is active (`Yes`/`No`) |
+| Installed At | Installation timestamp (UTC) |
+
+**Example Output:**
+```
+┌──────────────────────────────┬─────────┬────────┬─────────┬─────────────────────┐
+│ Name                         │ Version │ Type   │ Enabled │ Installed At        │
+├──────────────────────────────┼─────────┼────────┼─────────┼─────────────────────┤
+│ Musoq.DataSources.Roslyn     │ 7.2.0   │ DotNet │ Yes     │ 2024-12-15 10:30:00 │
+│ weather_api                  │ 1.0.0   │ Python │ Yes     │ 2024-12-16 14:20:00 │
+└──────────────────────────────┴─────────┴────────┴─────────┴─────────────────────┘
+```
+
+### 6.3 datasource show
+
+Show detailed information about a specific data source.
+
+```
+musoq datasource show <name>
+```
+
+**Output Fields:**
+
+| Field | Description |
+|-------|-------------|
+| Name | Data source identifier |
+| Version | Installed version |
+| Type | Plugin type |
+| Enabled | Active status |
+| Installed | Installation timestamp |
+| Path | Filesystem path to the plugin |
+| Entry Point | Main assembly or script file |
+| Architecture | Target architecture (x64, arm64, any) |
+| Platform | Target platform (windows, linux, osx, any) |
+
+**Example Output:**
+```
+Musoq.DataSources.Roslyn
+
+Version:      7.2.0
+Type:         DotNet
+Enabled:      Yes
+Installed:    2024-12-15 10:30:00
+Path:         /home/user/.musoq/DataSources/Musoq.DataSources.Roslyn
+Entry Point:  Musoq.DataSources.Roslyn.dll
+Architecture: x64
+Platform:     linux
+```
+
+### 6.4 datasource install
+
+Install a data source from the plugin registry.
+
+```
+musoq datasource install <name> [options]
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `<name>` | Plugin name (short or full, e.g., `roslyn` or `Musoq.DataSources.Roslyn`) |
+
+**Options:**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `-v, --version <VERSION>` | Specific version to install | latest |
+| `--offline` | Use cached registry only | false |
+| `--non-interactive` | Plain text progress output (for CI/CD) | false |
+
+**Examples:**
+
 ```bash
-echo "Line 1
-Line 2
-Line 3" | musoq run "select s.Value from #stdin.TextBlock() t cross apply t.SplitByNewLines(t.Value) s" --format csv
+# Install latest version (uses short name)
+musoq datasource install roslyn
+
+# Install using full package name
+musoq datasource install Musoq.DataSources.Roslyn
+
+# Install specific version
+musoq datasource install Musoq.DataSources.Roslyn --version 7.1.0
+
+# Non-interactive mode for CI/CD pipelines
+musoq datasource install Musoq.DataSources.Roslyn --non-interactive
 ```
 
-**Expected Output:**
+**Interactive Progress:**
 ```
-s.Value
-"Line 1"
-"Line 2"
-"Line 3"
+Installing Musoq.DataSources.Roslyn v7.2.0...
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:02
+✓ Successfully installed Musoq.DataSources.Roslyn (v7.2.0)
 ```
 
----
+### 6.5 datasource import
 
-#### Filter Text by Length
+Import a data source from a local path or zip file.
 
-**Command:**
+```
+musoq datasource import <path> [options]
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `<path>` | Path to plugin directory or zip file |
+
+**Options:**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--name <name>` | Custom name for imported plugin | Derived from path |
+| `--non-interactive` | Plain text progress output | false |
+
+**Examples:**
+
 ```bash
-echo "Short
-This is a much longer line of text
-Medium line here" | musoq run "select s.Value, Length(s.Value) as Len from #stdin.TextBlock() t cross apply t.SplitByNewLines(t.Value) s where Length(s.Value) > 20" --format csv
+# Import from directory
+musoq datasource import /path/to/plugin
+
+# Import from zip file
+musoq datasource import ./plugin.zip
+
+# Import with custom name
+musoq datasource import ./plugin.zip --name my-custom-plugin
 ```
 
-**Expected Output:**
+### 6.6 datasource uninstall
+
+Uninstall a data source.
+
 ```
-s.Value,Len
-"This is a much longer line of text",34
+musoq datasource uninstall <name>
 ```
 
----
-
-#### Count Lines
-
-**Command:**
+**Example:**
 ```bash
-echo "Line 1
-Line 2
-Line 3" | musoq run "select Count(s.Value) as LineCount from #stdin.TextBlock() t cross apply t.SplitByNewLines(t.Value) s" --format csv
+musoq datasource uninstall Musoq.DataSources.Roslyn
+# Output: Successfully uninstalled data source 'Musoq.DataSources.Roslyn'
 ```
 
-**Expected Output:**
+### 6.7 datasource create
+
+Create a new Python data source from a template.
+
 ```
-LineCount
-3
+musoq datasource create <name> [options]
 ```
 
-</details>
+**Arguments:**
 
-<details>
-<summary><h3>Regex Pattern Matching</h3></summary>
+| Argument | Description |
+|----------|-------------|
+| `<name>` | Name for the new Python data source (alphanumeric, underscores allowed) |
 
-<details>
-<summary><h3>Extract with Named Capture Groups</h3></summary>
+**Options:**
 
-Extract structured data from text using regex patterns with named capture groups.
+| Option | Description | Default |
+|--------|-------------|---------|
+| `-t, --template <template>` | Template type | `basic` |
 
-**Command:**
+**Available Templates:**
+
+| Template | Description | Use Case |
+|----------|-------------|----------|
+| `basic` | Minimal plugin with single data source | Simple data providers |
+| `api` | HTTP API integration template | REST API wrappers |
+| `database` | Database connection template | Database connectors |
+
+**Examples:**
+
 ```bash
-echo "John 30
-Alice 25
-Bob 35" | musoq run "select r.name, r.age from #stdin.Regex('(?<name>\w+)\s+(?<age>\d+)') r" --format csv
+# Create basic plugin
+musoq datasource create weather_data
+
+# Create API-based plugin
+musoq datasource create github_stats --template api
+
+# Create database plugin
+musoq datasource create postgres_analytics --template database
 ```
 
-**Expected Output:**
+### 6.8 datasource search
+
+Search for data sources in the plugin registry.
+
 ```
-r.name,r.age
-"John","30"
-"Alice","25"
-"Bob","35"
+musoq datasource search [query] [options]
 ```
 
-</details>
+**Arguments:**
 
-<details>
-<summary><h3>Extract with Unnamed Groups</h3></summary>
+| Argument | Description |
+|----------|-------------|
+| `[query]` | Optional search term (searches name, description, tags) |
 
-Use unnamed capture groups when you don't need custom column names.
+**Options:**
 
-**Command:**
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--offline` | Search cached registry only | false |
+
+**Examples:**
+
 ```bash
-echo "John 30
-Alice 25" | musoq run "select r.column1, r.column2 from #stdin.Regex('(\w+)\s+(\d+)') r" --format csv
+# List all available plugins
+musoq datasource search
+
+# Search for specific plugin
+musoq datasource search postgres
+
+# Search by tag
+musoq datasource search database
 ```
 
-**Expected Output:**
+**Example Output:**
 ```
-r.column1,r.column2
-John,30
-Alice,25
+┌──────────┬─────────────────────────────────┬─────────┬────────────────────────────────┐
+│ Name     │ Full Name                       │ Version │ Description                    │
+├──────────┼─────────────────────────────────┼─────────┼────────────────────────────────┤
+│ postgres │ Musoq.DataSources.Postgres      │ 7.2.0   │ Query PostgreSQL databases     │
+│ sqlite   │ Musoq.DataSources.SQLite        │ 7.2.0   │ Query SQLite databases         │
+└──────────┴─────────────────────────────────┴─────────┴────────────────────────────────┘
+
+Hint: Use 'musoq datasource install <name>' to install a plugin.
 ```
 
-</details>
+### 6.9 datasource folder
 
-<details>
-<summary><h3>Extract Email Addresses</h3></summary>
+Show or open the data sources folder.
 
-Find and extract email addresses from text.
+```
+musoq datasource folder [name] [options]
+```
 
-**Command:**
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `[name]` | Optional: specific data source name |
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--open` | Open folder in file explorer |
+
+**Examples:**
+
 ```bash
-echo "Contact john@example.com for details
-Reach out to alice@test.org
-Email bob@company.net" | musoq run "select r.email from #stdin.Regex('(?<email>[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})') r" --format csv
-```
-
-**Expected Output:**
-```
-r.email
-john@example.com
-alice@test.org
-bob@company.net
-```
-
-</details>
-
-<details>
-<summary><h3>Parse Log Files</h3></summary>
-
-Extract structured information from log file entries.
-
-**Command:**
-```bash
-echo "2024-01-01 10:30:00 ERROR Something went wrong
-2024-01-01 10:31:00 INFO Process started
-2024-01-01 10:32:00 WARN Memory low" | musoq run "select r.timestamp, r.level, r.message from #stdin.Regex('(?<timestamp>\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+(?<level>\w+)\s+(?<message>.+)') r" --format csv
-```
-
-**Expected Output:**
-```
-r.timestamp,r.level,r.message
-"2024-01-01 10:30:00",ERROR,Something went wrong
-"2024-01-01 10:31:00",INFO,Process started
-"2024-01-01 10:32:00",WARN,Memory low
-```
-
-</details>
-
-<details>
-<summary><h3>Filter Regex Results</h3></summary>
-
-Combine regex extraction with SQL filtering.
-
-**Command:**
-```bash
-echo "John 30
-Alice 25
-Bob 35
-Charlie 28" | musoq run "select r.name, r.age from #stdin.Regex('(?<name>\w+)\s+(?<age>\d+)') r where ToInt32(r.age) > 28" --format csv
-```
-
-**Expected Output:**
-```
-r.name,r.age
-"John","30"
-"Bob","35"
-```
-
-</details>
-
-<details>
-<summary><h3>Extract Multiple Matches Per Line</h3></summary>
-
-Find all occurrences of a pattern within text, even multiple matches on the same line.
-
-**Command:**
-```bash
-echo "The prices are $10.50 and $25.99 today" | musoq run "select r.price from #stdin.Regex('\$(?<price>\d+\.\d+)') r" --format csv
-```
-
-**Expected Output:**
-```
-r.price
-10.50
-25.99
-```
-
-</details>
-
-<details>
-<summary><h3>Parse URLs</h3></summary>
-
-Extract components from URLs using regex.
-
-**Command:**
-```bash
-echo "Visit https://www.example.com/path
-Check http://test.org/page
-See https://github.com/user/repo" | musoq run "select r.protocol, r.domain from #stdin.Regex('(?<protocol>https?)://(?<domain>[^/]+)') r" --format csv
-```
-
-**Expected Output:**
-```
-r.protocol,r.domain
-"https","www.example.com"
-"http","test.org"
-"https","github.com"
-```
-
-</details>
-
-<details>
-<summary><h3>Aggregate Regex Results</h3></summary>
-
-Perform SQL aggregations on extracted data.
-
-**Command:**
-```bash
-echo "John 30
-Alice 25
-Bob 35
-Charlie 28" | musoq run "select Count(r.name) as TotalCount from #stdin.Regex('(?<name>\w+)\s+(?<age>\d+)') r" --format csv
-```
-
-**Expected Output:**
-```
-TotalCount
-4
-```
-
-</details>
-
-<details>
-<summary><h3>Mix Named and Unnamed Groups</h3></summary>
-
-Combine named and unnamed capture groups in the same pattern.
-
-**Command:**
-```bash
-echo "John 30 Developer
-Alice 25 Manager" | musoq run "select r.name, r.column2, r.role from #stdin.Regex('(?<name>\w+)\s+(\d+)\s+(?<role>\w+)') r" --format csv
-```
-
-**Expected Output:**
-```
-r.name,r.column2,r.role
-|"John","30","Developer"
-"Alice","25","Manager"
-```
-
-**Note:** All extracted values are strings. Use conversion functions like `ToInt32()`, `ToDateTime()`, etc., when you need to perform operations requiring specific types.
-
-</details>
-
----
-
-</details>
-
-<details>
-<summary><h3>JSON Flattening and Processing</h3></summary>
-
-<details>
-<summary><h3>Basic JSON Flattening</h3></summary>
-
-Flatten JSON structures into path/value pairs for easy querying and manipulation.
-
-**Command:**
-```bash
-echo '{"user": {"name": "Alice", "age": 30}, "tags": ["dev", "ops"]}' | musoq run "SELECT Path, Value FROM #stdin.JsonFlat() j" --format csv
-```
-
-**Expected Output:**
-```
-j.Path,j.Value
-"user.name","Alice"
-"user.age","30"
-"tags[0]","dev"
-"tags[1]","ops"
-```
-
-</details>
-
-<details>
-<summary><h3>Filter Object Properties</h3></summary>
-
-Select specific properties from JSON objects while excluding others.
-
-**Command:**
-```bash
-echo '{"id":123,"name":"Alice","password":"secret","email":"alice@example.com"}' | musoq run "
-  SELECT j.Path, j.Value 
-  FROM #stdin.JsonFlat() j 
-  WHERE j.Path LIKE 'id' OR j.Path LIKE 'name' OR j.Path LIKE 'email'
-" --format interpreted_json
-```
-
-**Expected Output:**
-```json
-{"id":123,"name":"Alice","email":"alice@example.com"}
-```
-
-</details>
-
-<details>
-<summary><h3>Filter Array Elements</h3></summary>
-
-Filter elements from JSON arrays based on conditions.
-
-**Command:**
-```bash
-echo '{"items":[0,5,10]}' | musoq run "
-  SELECT j.Path, j.Value 
-  FROM #stdin.JsonFlat() j 
-  WHERE j.Value <> '5'
-" --format reconstructed_json
-```
-
-**Expected Output:**
-```json
-{"items":[0,10]}
-```
-
-</details>
-
-<details>
-<summary><h3>Modify JSON Values</h3></summary>
-
-Transform values while maintaining JSON structure.
-
-**Command:**
-```bash
-echo '{"name":"Alice","age":30,"city":"New York"}' | musoq run "
-  SELECT j.Path, 
-    CASE WHEN j.Path = 'age' THEN '35' ELSE j.Value END as Value
-  FROM #stdin.JsonFlat() j
-" --format reconstructed_json
-```
-
-**Expected Output:**
-```json
-{"name":"Alice","age":35,"city":"New York"}
-```
-
-</details>
-
-<details>
-<summary><h3>Filter Nested Object Properties</h3></summary>
-
-Remove sensitive data from nested JSON structures.
-
-**Command:**
-```bash
-echo '{"user":{"name":"Bob","email":"bob@example.com","password":"secret123"},"timestamp":"2024-01-01"}' | musoq run "
-  SELECT j.Path, j.Value
-  FROM #stdin.JsonFlat() j
-  WHERE j.Path LIKE '%name%' OR j.Path LIKE '%email%' OR j.Path LIKE 'timestamp'
-" --format reconstructed_json
-```
-
-**Expected Output:**
-```json
-{"user":{"name":"Bob","email":"bob@example.com"},"timestamp":"2024-01-01"}
-```
-
-</details>
-
-<details>
-<summary><h3>Modify Array Elements</h3></summary>
-
-Transform values within arrays.
-
-**Command:**
-```bash
-echo '{"numbers":[10,20,30]}' | musoq run "
-  SELECT j.Path,
-    CASE 
-      WHEN Contains(j.Path, 'numbers[') THEN ToString(ToInt32(j.Value) * 2)
-      ELSE j.Value
-    END as Value
-  FROM #stdin.JsonFlat() j
-" --format reconstructed_json
-```
-
-**Expected Output:**
-```json
-{"numbers":[20,40,60]}
-```
-
-</details>  
-
-<details>
-<summary><h3>Query Nested Arrays</h3></summary>
-
-Work with complex nested structures containing arrays.
-
-**Command:**
-```bash
-echo '{"users":[{"name":"Alice","scores":[85,90,95]},{"name":"Bob","scores":[70,75,80]}]}' | musoq run "
-  SELECT j.Path, j.Value
-  FROM #stdin.JsonFlat() j
-  WHERE j.Path LIKE '%scores%'
-" --format csv
-```
-
-**Expected Output:**
-```
-j.Path,j.Value
-"users[0].scores[0]","85"
-"users[0].scores[1]","90"
-"users[0].scores[2]","95"
-"users[1].scores[0]","70"
-"users[1].scores[1]","75"
-"users[1].scores[2]","80"
-```
-
-</details>
-
-<details>
-<summary><h3>Property Renaming</h3></summary>
-
-Rename properties while filtering.
-
-**Command:**
-```bash
-echo '{"user_name":"Alice","user_email":"alice@example.com","user_age":30}' | musoq run "
-  SELECT 
-    CASE 
-      WHEN j.Path = 'user_name' THEN 'name'
-      WHEN j.Path = 'user_email' THEN 'email'
-      ELSE j.Path
-    END as Path,
-    j.Value
-  FROM #stdin.JsonFlat() j
-  WHERE j.Path LIKE 'user_name' OR j.Path LIKE 'user_email'
-" --format reconstructed_json
-```
-
-**Expected Output:**
-```json
-{"name":"Alice","email":"alice@example.com"}
-```
-
-</details>
-
-</details>
-
----
-
-</details>
-
-<details>
-<summary><h3>YAML Flattening and Processing</h3></summary>
-
-<details>
-<summary><h3>Basic YAML Flattening</h3></summary>
-
-Flatten YAML structures into path/value pairs for easy querying and manipulation.
-
-**Command:**
-```bash
-echo 'user:
-  name: Alice
-  age: 30
-tags:
-  - dev
-  - ops' | musoq run "SELECT y.Path, y.Value FROM #stdin.YamlFlat() y" --format csv
-```
-
-**Expected Output:**
-```
-y.Path,y.Value
-"user.name",Alice
-"user.age",30
-"tags[0]",dev
-"tags[1]",ops
-```
-
-</details>
-
-<details>
-<summary><h3>Convert YAML to JSON</h3></summary>
-
-Transform YAML data into JSON format using interpreted_json output.
-
-**Command:**
-```bash
-echo 'user:
-  name: Alice
-  age: 30
-  email: alice@example.com
-active: true' | musoq run "
-  SELECT y.Path, y.Value 
-  FROM #stdin.YamlFlat() y
-" --format interpreted_json
-```
-
-**Expected Output:**
-```json
-[{"user":{"name":"Alice","age":30,"email":"alice@example.com"},"active":true}]
-```
-
-</details>
-
-<details>
-<summary><h3>Convert JSON to YAML</h3></summary>
-
-Transform JSON data into YAML format.
-
-**Command:**
-```bash
-echo '{"user":{"name":"Bob","age":25,"email":"bob@example.com"},"active":false}' | musoq run "
-  SELECT j.Path, j.Value
-  FROM #stdin.JsonFlat() j
-" --format yaml
-```
-
-**Expected Output:**
-```yaml
-- j.Path: user.name
-  j.Value: Bob
-- j.Path: user.age
-  j.Value: 25
-- j.Path: user.email
-  j.Value: bob@example.com
-- j.Path: active
-  j.Value: false
-```
-
-</details>
-
-<details>
-<summary><h3>Filter YAML Properties</h3></summary>
-
-Select specific properties from YAML objects while excluding others.
-
-**Command:**
-```bash
-echo 'id: 123
-name: Alice
-password: secret
-email: alice@example.com' | musoq run "
-  SELECT y.Path, y.Value 
-  FROM #stdin.YamlFlat() y 
-  WHERE y.Path LIKE 'id' OR y.Path LIKE 'name' OR y.Path LIKE 'email'
-" --format interpreted_json
-```
-
-**Expected Output:**
-```json
-[{"id":123,"name":"Alice","email":"alice@example.com"}]
-```
-
-</details>
-
-<details>
-<summary><h3>Modify YAML Array Values</h3></summary>
-
-Transform values within YAML arrays.
-
-**Command:**
-```bash
-echo 'numbers:
-  - 10
-  - 20
-  - 30' | musoq run "
-  SELECT y.Path,
-    CASE 
-      WHEN Contains(y.Path, 'numbers[') THEN ToString(ToInt32(y.Value) * 2)
-      ELSE y.Value
-    END as Value
-  FROM #stdin.YamlFlat() y
-" --format interpreted_json
-```
-
-**Expected Output:**
-```json
-[{"numbers":[20,40,60]}]
-```
-
-</details>
-
-<details>
-<summary><h3>Query Nested YAML Arrays</h3></summary>
-
-Work with complex nested YAML structures containing arrays.
-
-**Command:**
-```bash
-echo 'users:
-  - name: Alice
-    scores:
-      - 85
-      - 90
-      - 95
-  - name: Bob
-    scores:
-      - 70
-      - 75
-      - 80' | musoq run "
-  SELECT y.Path, y.Value
-  FROM #stdin.YamlFlat() y
-  WHERE y.Path LIKE '%scores%'
-" --format csv
-```
-
-**Expected Output:**
-```
-y.Path,y.Value
-"users[0].scores[0]",85
-"users[0].scores[1]",90
-"users[0].scores[2]",95
-"users[1].scores[0]",70
-"users[1].scores[1]",75
-"users[1].scores[2]",80
-```
-
-</details>
-
-<details>
-<summary><h3>Convert YAML Arrays to JSON</h3></summary>
-
-Transform YAML arrays containing objects into JSON format.
-
-**Command:**
-```bash
-echo 'users:
-  - name: Alice
-    role: Developer
-  - name: Bob
-    role: Manager' | musoq run "
-  SELECT y.Path, y.Value
-  FROM #stdin.YamlFlat() y
-" --format interpreted_json
-```
-
-**Expected Output:**
-```json
-[{"users":[{"name":"Alice","role":"Developer"},{"name":"Bob","role":"Manager"}]}]
-```
-
-</details>
-
-<details>
-<summary><h3>Count YAML Properties</h3></summary>
-
-Perform aggregate operations on flattened YAML.
-
-**Command:**
-```bash
-echo 'name: Alice
-age: 30
-city: New York' | musoq run "
-  SELECT Count(y.Path) as PropertyCount 
-  FROM #stdin.YamlFlat() y
-" --format csv
-```
-
-**Expected Output:**
-```
-PropertyCount
-3
-```
-
-</details>
-
-<details>
-<summary><h3>Convert YAML to JSON (Reconstructed Format)</h3></summary>
-
-Convert YAML to JSON preserving exact structure using `reconstructed_json` format.
-
-**Command:**
-```bash
-echo 'user:
-  name: Alice
-  age: 30
-  email: alice@example.com
-active: true' | musoq run "
-  SELECT y.Path as Path, y.Value as Value
-  FROM #stdin.YamlFlat() y
-" --format reconstructed_json
-```
-
-**Expected Output:**
-```json
-{"user":{"name":"Alice","age":30,"email":"alice@example.com"},"active":true}
-```
-
-</details>
-
-<details>
-<summary><h3>Convert JSON to YAML (Reconstructed Format)</h3></summary>
-
-Convert JSON to YAML preserving exact structure using `reconstructed_yaml` format.
-
-**Command:**
-```bash
-echo '{"user":{"name":"Bob","age":25,"email":"bob@example.com"},"active":false}' | musoq run "
-  SELECT j.Path as Path, j.Value as Value
-  FROM #stdin.JsonFlat() j
-" --format reconstructed_yaml
-```
-
-**Expected Output:**
-```yaml
-user:
-  name: Bob
-  age: 25
-  email: bob@example.com
-active: false
-```
-
-</details>
-
-<details>
-<summary><h3>Convert Root-Level JSON Array to YAML</h3></summary>
-
-Convert JSON arrays at root level to YAML, preserving array structure.
-
-**Command:**
-```bash
-echo '[{"name":"Alice","age":30},{"name":"Bob","age":25}]' | musoq run "
-  SELECT j.Path as Path, j.Value as Value
-  FROM #stdin.JsonFlat() j
-" --format reconstructed_yaml
-```
-
-**Expected Output:**
-```yaml
-- name: Alice
-  age: 30
-- name: Bob
-  age: 25
-```
-
-</details>
-
-<details>
-<summary><h3>Convert Root-Level YAML Array to JSON</h3></summary>
-
-Convert YAML arrays at root level to JSON, preserving array structure.
-
-**Command:**
-```bash
-echo '- name: Alice
-  age: 30
-- name: Bob
-  age: 25' | musoq run "
-  SELECT y.Path as Path, y.Value as Value
-  FROM #stdin.YamlFlat() y
-" --format reconstructed_json
-```
-
-**Expected Output:**
-```json
-[{"name":"Alice","age":30},{"name":"Bob","age":25}]
-```
-
-</details>
-
-<details>
-<summary><h3>Round-Trip JSON Array Conversion</h3></summary>
-
-Verify that JSON arrays can be flattened and reconstructed without loss.
-
-**Command:**
-```bash
-echo '[{"name":"Alice","age":30},{"name":"Bob","age":25}]' | musoq run "
-  SELECT j.Path as Path, j.Value as Value
-  FROM #stdin.JsonFlat() j
-" --format reconstructed_json
-```
-
-**Expected Output:**
-```json
-[{"name":"Alice","age":30},{"name":"Bob","age":25}]
-```
-
-</details>
-
----
-
-</details>
-
-<details>
-<summary><h3>Post-Processing with --execute</h3></summary>
-
-Execute shell commands for each row of query results using template variables. The `--execute` option allows you to process query output with external commands or scripts.
-
-#### Basic Command Execution
-
-**Command:**
-```bash
-musoq run "select 1 as Test from #system.dual()" --execute "powershell -command 1+2"
+# Show root data sources folder path
+musoq datasource folder
+# Output: /home/user/.musoq/DataSources
+
+# Open specific plugin folder
+musoq datasource folder my_plugin --open
+
+# Open root folder
+musoq datasource folder --open
 ```
 
 ---
 
-#### Using Template Variables
+## 7. Python Plugin Development
 
-Template variables use the `{{ column_name }}` syntax to access values from query result columns.
+Python plugins enable developers to create custom data sources using Python scripts. Musoq uses Python.NET to integrate Python code into the query engine.
 
-**Command:**
-```bash
-musoq run "select 'John' as name, 30 as age from #system.dual()" --execute "echo Hello {{ name }}, you are {{ age }} years old" --format csv
-```
+### 7.1 Plugin Version
 
-**Expected Output:**
-```csv
-name,age,Expression,Result
-John,30,"echo Hello John, you are 30 years old","Hello John, you are 30 years old"
-```
+Musoq supports **v.2** Python plugins exclusively. The v.2 format uses a project-based structure with a directory containing `main.py` as the entry point. Flat `.py` files (v.1 format) are **no longer supported**.
 
-- Executes a command template for each row
-- Replaces `{{ name }}` with "John" and `{{ age }}` with "30"
-- Adds the evaluated expression and its result as new columns
-- Works only with table and csv format
+### 7.2 Project Structure
 
----
-
-#### File System Operations
-
-**Command (Windows):**
-```bash
-musoq run "select 'test.txt' as filename from #system.dual()" --execute "powershell -command Test-Path {{ filename }}" --format json
-```
-
-**Command (Linux/macOS):**
-```bash
-musoq run "select 'test.txt' as filename from #system.dual()" --execute "test -f {{ filename }} && echo true || echo false" --format json
-```
-
----
-
-#### Processing Multiple Rows
-
-**Command:**
-```bash
-musoq run "
-  select s.Value as line 
-  from #stdin.TextBlock() t 
-  cross apply t.SplitByNewLines(t.Value) s
-" --execute "echo Processing: {{ line }}" --format csv < input.txt
-```
-
-- Reads lines from stdin
-- Executes the echo command for each line
-- Shows both original data and execution results
-
----
-
-#### Case-Insensitive Variable Matching
-
-Template variables are **case-insensitive** - `{{ Name }}`, `{{ name }}`, and `{{ NAME }}` all reference the same column.
-
-**Command:**
-```bash
-musoq run "select 'Alice' as Name from #system.dual()" --execute "echo Hello {{ name }}" --format json
-```
-
----
-
-#### Working with Different Output Formats
-
-The `--execute` option works with all output formats:
-
-**JSON Format:**
-```bash
-musoq run "select 'test' as value from #system.dual()" --execute "echo {{ value }}" --format json
-```
-
-**CSV Format:**
-```bash
-musoq run "select 'test' as value from #system.dual()" --execute "echo {{ value }}" --format csv
-```
-
-**Table Format:**
-```bash
-musoq run "select 'test' as value from #system.dual()" --execute "echo {{ value }}"
-```
-
-**Raw Format:**
-```bash
-musoq run "select 'test' as value from #system.dual()" --execute "echo {{ value }}" --format raw
-```
-
----
-
-#### Platform-Specific Commands
-
-Commands are executed using the appropriate shell for your platform:
-
-**Windows (PowerShell):**
-```bash
-musoq run "select 'C:\temp' as path from #system.dual()" --execute "powershell -command Get-ChildItem {{ path }}"
-```
-
-**Linux/macOS (sh):**
-```bash
-musoq run "select '/tmp' as path from #system.dual()" --execute "ls -la {{ path }}"
-```
-
----
-
-#### Important Notes
-
-1. **Variable Substitution**: Missing variables in templates remain as `{{ variable_name }}` in the output
-2. **Error Handling**: Command execution errors are captured in the `Result` column
-3. **Performance**: Commands execute sequentially for each row - consider performance for large datasets
-4. **Shell Syntax**: Commands use the native shell syntax for your platform (cmd.exe on Windows, /bin/sh on Linux/macOS)
-5. **Escaping**: Values are substituted as-is - be careful with special characters in shell commands
-
-</details>
-
----
-
-## Bucket Management
-
-<details>
-<summary><h3>Create Bucket</h3></summary>
-
-Create a named storage bucket for query results.
-
-**Command:**
-```bash
-musoq bucket create my-bucket
-```
-
-**Expected Output:**
-```
-Bucket 'my-bucket' created successfully
-```
-
-</details>
-
-<details>
-<summary><h3>Delete Bucket</h3></summary>
-
-Remove a bucket and its contents.
-
-**Command:**
-```bash
-musoq bucket delete my-bucket
-```
-
-**Expected Output:**
-```
-Bucket 'my-bucket' deleted successfully
-```
-
-</details>
-
-<details>
-<summary><h3>Using Buckets in Queries</h3></summary>
-
-Store query results in a bucket for later retrieval.
-
-**Step 1: Create the bucket**
-```bash
-musoq bucket create my-results
-```
-
-**Step 2: Run query with bucket**
-```bash
-musoq run "select 30001 from #system.dual()" --bucket my-results
-```
-
-**Expected Output:**
-```
-┌───────┐
-│ 30001 │
-├───────┤
-│ 30001 │
-└───────┘
-```
-
-</details>
-
----
-
-<details>
-<summary><h3>Query with Bucket Storage</h3></summary>
-
-Runs a query agains data stored in a specified bucket.
-
-**Command:**
-```bash
-musoq run "select 20005 from #system.dual()" --bucket test-bucket
-```
-
-**Expected Output:**
-```
-┌───────┐
-│ 20005 │
-├───────┤
-│ 20005 │
-└───────┘
-```
-
-</details>
-
-## Python Plugin Management
-
-> **Note:** Python plugins use project-based architecture. Each plugin is a directory containing `main.py` and optional supporting files like `requirements.txt`.
-
-<details>
-<summary><h3>List Python Plugins</h3></summary>
-
-View all available Python data source plugin projects.
-
-**Command:**
-```bash
-musoq python list
-```
-
-**Expected Output (when no plugins exist):**
-```
-Name,Description,Created,Modified
-```
-
-**Expected Output (with plugins):**
-```
-Name,Description,Created,Modified
-alpha-script,Alpha script for testing,2024-10-21 10:30:00,2024-10-21 10:30:00
-beta-script,Beta script for testing,2024-10-21 10:35:00,2024-10-21 10:35:00
-```
-
-</details>
-
-<details>
-<summary><h3>Read Python Plugin</h3></summary>
-
-Display the contents of a Python plugin project's main.py file.
-
-**Command:**
-```bash
-musoq python read my_plugin
-```
-
-**Expected Output:**
-```
-# Project: my_plugin
-# Description: My plugin description
-# Created: 2024-10-21 10:30:00
-# Modified: 2024-10-21 10:30:00
-
-class DataPlugin:
-    def schema_name(self):
-        return "mydata"
-    # ... rest of plugin code
-```
-
-</details>
-
-<details>
-<summary><h3>Create Python Plugin</h3></summary>
-
-Create a new Python plugin project from a template.
-
-**Command:**
-```bash
-musoq python create my_plugin
-```
-
-**With specific template:**
-```bash
-musoq python create my_plugin basic
-musoq python create my_plugin api
-```
-
-**Expected Output:**
-```
-Project 'my_plugin' created successfully from template 'basic'.
-```
+Every v.2 plugin is a project directory:
 
 ```
-~/.musoq/Python/Scripts/my_plugin/
-├── main.py          # Plugin implementation (from template)
-├── requirements.txt # Optional: Python dependencies
-└── project.json     # Optional: Project metadata
+~/.musoq/Python/Scripts/
+└── my_plugin/                    # Plugin project name
+    ├── main.py                   # REQUIRED: Plugin entry point
+    ├── requirements.txt          # Optional: Python dependencies (auto-installed)
+    ├── project.json              # Optional: Plugin metadata
+    └── helpers.py                # Optional: Supporting modules
 ```
 
-The project folder is automatically opened in your system's default file explorer.
+**Key Requirements:**
 
-**Available templates:**
-- `basic` (default): Simple data source template
-- `api`: Template for API-based data sources
+- `main.py` is **required** and must contain the `DataPlugin` class
+- Project name (directory name) must be alphanumeric with underscores
+- Additional `.py` files are optional for code organization
+- Plugin is automatically discovered when directory contains `main.py`
 
-**Plugin structure example (v.2):**
+### 7.3 DataPlugin Contract
+
+Every Python plugin must implement this exact contract:
+
 ```python
-"""
-Basic Python Plugin Template (v.2)
+class DataPlugin:
+    """Complete v.2 plugin contract - ALL METHODS REQUIRED"""
+    
+    def schema_name(self) -> str:
+        """
+        Return the schema name used in SQL queries.
+        Must be alphanumeric (underscores allowed), unique across plugins.
+        
+        Example: return "mydata"
+        SQL Usage: SELECT * FROM #mydata.method()
+        """
+        pass
+    
+    def data_sources(self) -> list[str]:
+        """
+        Return list of data source method names.
+        Each name becomes a SQL-callable method.
+        
+        Example: return ["users", "posts", "summary"]
+        """
+        pass
+    
+    def schemas(self) -> dict[str, dict[str, str]]:
+        """
+        Return column schemas for each data source.
+        Keys MUST match data_sources() names.
+        
+        Example:
+            return {
+                "users": {"id": "int", "name": "str", "email": "str"},
+                "posts": {"id": "int", "user_id": "int", "title": "str"}
+            }
+        """
+        pass
+    
+    def initialize(self) -> None:
+        """Initialize plugin (called once at load time)."""
+        pass
+    
+    def get_required_env_vars(self, method_name: str) -> dict[str, bool]:
+        """
+        Return required environment variables for method.
+        True = required (query fails if missing)
+        False = optional (uses default)
+        
+        Example: return {"API_KEY": True, "API_ENDPOINT": False}
+        """
+        pass
+    
+    def get_required_execute_arguments(self, method_name: str) -> list[tuple[str, str]]:
+        """
+        Return parameter definitions for method.
+        
+        Example: return [("minimum_id", "int"), ("name_filter", "str")]
+        """
+        pass
+    
+    def execute(self, method_name: str, environment_variables: dict[str, str], *args):
+        """
+        Execute data source method and yield rows.
+        
+        Args:
+            method_name: Data source method to execute
+            environment_variables: Runtime environment variables
+            *args: Parameters from SQL query
+        
+        MUST be a generator (use yield, not return).
+        MUST yield dictionaries with keys matching schema.
+        """
+        pass
+    
+    def dispose(self) -> None:
+        """Cleanup resources (called at unload)."""
+        pass
 
-This template provides the simplest structure for a Musoq Python plugin.
-It demonstrates a single data source with basic columns.
+# Module-level instance (REQUIRED)
+plugin = DataPlugin()
+```
 
-SQL Usage:
-    SELECT * FROM #{schema_name}.items()
-    SELECT * FROM #{schema_name}.items(10)  -- With minimum_id parameter
-"""
+### 7.4 Supported Types
+
+| Type String | Python Type | SQL Type | Example |
+|-------------|-------------|----------|---------|
+| `"int"` | `int` | INTEGER | `42` |
+| `"str"` | `str` | VARCHAR | `"hello"` |
+| `"float"` | `float` | FLOAT | `3.14` |
+| `"bool"` | `bool` | BOOLEAN | `True` |
+| `"datetime"` | `str` | DATETIME | `"2024-12-01 15:30:00"` |
+
+**DateTime Format:** Use ISO 8601 format: `YYYY-MM-DD HH:MM:SS`
+
+### 7.5 Automatic Dependency Installation
+
+When a plugin includes `requirements.txt`, Musoq automatically installs dependencies during plugin discovery:
+
+**requirements.txt:**
+```txt
+requests>=2.31.0
+pandas==2.1.0
+python-dateutil>=2.8.2
+```
+
+### 7.6 Local Module Imports
+
+Python plugins can import from local modules in the same directory:
+
+**Project Structure:**
+```
+~/.musoq/Python/Scripts/hackernews/
+├── main.py          # Entry point
+├── http_client.py   # HTTP utilities
+├── parsers.py       # Data parsing logic
+└── requirements.txt # External dependencies
+```
+
+**main.py:**
+```python
+from http_client import fetch_json
+from parsers import parse_story
 
 class DataPlugin:
-    """Basic plugin with a single data source."""
+    def execute(self, method_name, environment_variables, *args):
+        data = fetch_json("https://api.example.com/stories")
+        for item in data:
+            yield parse_story(item)
+
+plugin = DataPlugin()
+```
+
+### 7.7 Environment Variables
+
+Access environment variables in the `execute` method:
+
+```python
+def execute(self, method_name, environment_variables, *args):
+    # Get with default
+    api_key = environment_variables.get("API_KEY", "")
+    endpoint = environment_variables.get("API_URL", "https://default.com")
     
+    # Get with validation
+    api_key = environment_variables.get("API_KEY")
+    if not api_key:
+        raise ValueError("API_KEY required")
+    
+    # Type conversion
+    timeout = int(environment_variables.get("TIMEOUT", "30"))
+```
+
+### 7.8 Complete Example
+
+**main.py:**
+```python
+"""Weather data plugin with current and forecast data sources."""
+from datetime import datetime
+
+class DataPlugin:
     def schema_name(self):
-        """Return the schema name used in SQL queries: #schema_name.method()"""
-        return "{schema_name}"
+        return "weather"
     
     def data_sources(self):
-        """Return list of available data source method names."""
-        return ["items"]
+        return ["current", "forecast"]
     
     def schemas(self):
-        """Return dictionary mapping data source names to their column schemas.
-        
-        Returns:
-            dict: {method_name: {column: type, ...}, ...}
-        """
         return {
-            "items": {
-                "id": "int",
-                "name": "str",
-                "value": "float",
-                "active": "bool"
+            "current": {
+                "city": "str",
+                "temperature": "float",
+                "humidity": "int",
+                "conditions": "str",
+                "timestamp": "datetime"
+            },
+            "forecast": {
+                "city": "str",
+                "date": "str",
+                "high_temp": "float",
+                "low_temp": "float",
+                "precipitation": "int"
             }
         }
     
     def initialize(self):
-        """Initialize the plugin - called once when plugin is loaded."""
         pass
     
     def get_required_env_vars(self, method_name):
-        """Return dictionary of environment variables for the specified method.
-        
-        Args:
-            method_name: The data source method name
-            
-        Returns:
-            dict: Variable name -> is_required (bool)
-        """
-        if method_name == "items":
-            return {
-                # "API_KEY": True,     # Example: required variable
-                # "ENDPOINT": False,   # Example: optional variable
-            }
-        return {}
+        return {"WEATHER_API_KEY": True, "WEATHER_API_URL": False}
     
     def get_required_execute_arguments(self, method_name):
-        """Return list of parameter definitions for the specified method.
-        
-        Args:
-            method_name: The data source method name
-            
-        Returns:
-            list: List of (parameter_name, parameter_type) tuples
-        """
-        if method_name == "items":
-            return [
-                ("minimum_id", "int"),  # Optional parameter with default
-            ]
-        return []
+        return [("city", "str")]
     
     def execute(self, method_name, environment_variables, *args):
-        """Execute the specified data source method.
+        api_key = environment_variables.get("WEATHER_API_KEY")
+        if not api_key:
+            raise ValueError("WEATHER_API_KEY required")
         
-        Args:
-            method_name: The data source method name to execute
-            environment_variables: Dictionary of environment variables (key-value pairs)
-            *args: Parameters passed to the method
-            
-        Yields:
-            dict: Row data with keys matching the schema
-        """
-        if method_name == "items":
-            yield from self._get_items(environment_variables, *args)
-        else:
-            raise ValueError(f"Unknown method: {method_name}")
-    
-    def _get_items(self, environment_variables, *args):
-        """Generate sample items data.
+        city = args[0] if args else "London"
         
-        Args:
-            environment_variables: Dictionary of environment variables
-            *args: Optional minimum_id parameter
-        """
-        minimum_id = int(args[0]) if len(args) > 0 else 1
-        
-        for i in range(minimum_id, minimum_id + 10):
+        if method_name == "current":
             yield {
-                "id": i,
-                "name": f"Item {i}",
-                "value": i * 10.5,
-                "active": i % 2 == 0
+                "city": city,
+                "temperature": 22.5,
+                "humidity": 65,
+                "conditions": "Partly Cloudy",
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
+        elif method_name == "forecast":
+            for i in range(5):
+                yield {
+                    "city": city,
+                    "date": f"2024-12-{i+1:02d}",
+                    "high_temp": 24.0 - i,
+                    "low_temp": 15.0 - i,
+                    "precipitation": 10 * (i + 1)
+                }
     
     def dispose(self):
-        """Cleanup resources - called when plugin is unloaded."""
         pass
 
 plugin = DataPlugin()
 ```
 
-</details>
-
-<details>
-<summary><h3>Rename Python Plugin</h3></summary>
-
-Rename an existing Python plugin project.
-
-**Command:**
-```bash
-musoq python update old_name new_name
+**SQL Usage:**
+```sql
+SELECT * FROM #weather.current('Paris')
+SELECT * FROM #weather.forecast('London') WHERE precipitation > 20
 ```
 
-**Expected Output:**
-```
-Python project renamed from 'old_name' to 'new_name' successfully
-```
+### 7.9 Plugin Metadata (Runtime)
 
-</details>
+When a Python plugin is loaded, Musoq extracts the following metadata:
 
-<details>
-<summary><h3>Delete Python Plugin</h3></summary>
+| Property | Description |
+|----------|-------------|
+| `ProjectName` | Directory name containing the plugin |
+| `ProjectPath` | Full path to the project directory |
+| `MainScriptPath` | Path to `main.py` |
+| `SchemaName` | Value from `schema_name()` |
+| `DataSources` | List of data source metadata |
 
-Remove a Python plugin project from the system.
+**Per Data Source Metadata:**
 
-**Command:**
-```bash
-musoq python delete my_plugin
-```
+| Property | Description |
+|----------|-------------|
+| `Name` | Data source method name |
+| `Schema` | Column name → Type mapping |
+| `ExecuteArguments` | List of (name, type) tuples |
+| `EnvironmentVariables` | Variable name → Required flag |
 
-**Expected Output:**
-```
-Python plugin 'my_plugin' deleted successfully
-```
+### 7.10 Testing Python Plugins
 
-</details>
+**Standalone Testing:**
 
-<details>
-<summary><h3>Show Plugin Directory</h3></summary>
+```python
+def main():
+    """Test plugin standalone."""
+    plugin = DataPlugin()
+    plugin.initialize()
+    
+    test_env = {"WEATHER_API_KEY": "test_key"}
+    
+    for row in plugin.execute("current", test_env, "Paris"):
+        print(f"  {row}")
+    
+    plugin.dispose()
 
-Display or open the Python plugins directory.
-
-**Command:**
-```bash
-musoq python folder
-```
-
-**Expected Output:**
-```
-~/.musoq/Python/Scripts/
-```
-
-**Open in file explorer:**
-```bash
-musoq python folder --open
+if __name__ == "__main__":
+    main()
 ```
 
-**Open specific project:**
-```bash
-musoq python folder my_plugin --open
-```
+Run: `python main.py`
 
-</details>
+**Integration Testing via SQL:**
 
-<details>
-<summary><h3>Using Python Plugins in Queries</h3></summary>
+```sql
+-- Test basic execution
+SELECT * FROM #weather.current('London')
 
-Execute queries using your custom Python plugins as data sources.
+-- Test with filters
+SELECT * FROM #weather.forecast('Paris') WHERE precipitation > 20
 
-**Prerequisite:** Create a Python plugin with schema name "mydata" and data sources ["items", "summary"]
-
-**Command:**
-```bash
-musoq run "select id, name, value from #mydata.items()" --format csv
-```
-
-**With parameters:**
-```bash
-musoq run "select * from #mydata.items(100)" --format csv
-```
-
-**Multiple data sources:**
-```bash
-musoq run "select * from #mydata.summary()" --format csv
-```
-
-**Expected Output:**
-```
-id,name,value
-42,"Answer","Meaning"
-```
-
-**Note:** The server must be restarted after creating a plugin for it to be discovered, or the plugin must exist before server startup.
-
-</details>
-
----
-
-## Tool Management
-
-<details>
-<summary><h3>List Tools</h3></summary>
-
-View all available tools with their metadata.
-
-#### List All Tools
-
-**Command:**
-```bash
-musoq tool list
-```
-
-**Expected Output:**
-```
-Name,Description,ParameterCount
-alpha-tool,Tool for alpha scenarios,2
-beta-tool,Secondary analyzer,0
+-- Test aggregation
+SELECT COUNT(*) FROM #weather.forecast('Tokyo')
 ```
 
 ---
 
-#### Filter Tools by Search Term
+## 8. Tool Management
 
-**Command:**
-```bash
-musoq tool list --search "alpha"
+Tools are predefined SQL queries with dynamic parameters, stored as YAML files in `~/.musoq/Tools/`.
+
+### 8.1 tool list
+
+List available tools.
+
+```
+musoq tool list [options]
 ```
 
-**Expected Output:**
+**Options:**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--search <query>` | Filter tools by name or description | None |
+
+**Example Output:**
 ```
-Name,Description,ParameterCount
-alpha-tool,Tool for alpha scenarios,2
+┌──────────────────────┬─────────────────────────────────────────────┐
+│ Name                 │ Description                                 │
+├──────────────────────┼─────────────────────────────────────────────┤
+│ weather              │ Get current weather for a city              │
+│ file_analysis        │ Analyze files in a directory                │
+│ docker_stats         │ Show container resource usage               │
+└──────────────────────┴─────────────────────────────────────────────┘
 ```
 
-</details>
+### 8.2 tool show
 
-<details>
-<summary><h3>Show Tool Details</h3></summary>
+Show detailed information about a specific tool.
 
-Display detailed information about a specific tool.
-
-**Command:**
-```bash
-musoq tool show alpha-tool
+```
+musoq tool show <name>
 ```
 
-**Expected Output:**
+**Example Output:**
 ```
-Name: alpha-tool
-Description: Tool for alpha scenarios
-Query: SELECT 10001 FROM #system.dual()
-Output Format: json
+Tool: weather
+Description: Get current weather for a city
+
+Query:
+  SELECT city, temperature, conditions
+  FROM #weather.current('{{city}}')
+  WHERE temperature > {{min_temp}}
+
+Output Format: table
 
 Parameters:
-  - firstParam (string) [Required]
-    Description: Primary value to process
-  - optionalFlag (bool)
-    Description: Optional flag controlling execution
-    Default: enabled
+  city (string, required)
+    City name to query
+  
+  min_temp (int, optional, default: -50)
+    Minimum temperature filter
 ```
 
-</details>
+### 8.3 tool execute
 
-<details>
-<summary><h3>Execute Tool</h3></summary>
+Execute a tool with dynamic parameters.
 
-Run a tool with specified parameters.
+```
+musoq tool execute <tool-name> [parameters...] [options]
+```
 
-#### Execute with Debug Output
+**Parameter Passing:**
 
-**Command:**
+Parameters can be passed in two formats:
+
+1. **Positional (key-value pairs):** `param1 value1 param2 value2`
+2. **Named:** `--param1 value1 --param2 value2`
+
+**Options:**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--format <format>` | Output format override | Tool's default |
+| `--debug` | Show processed query before execution | false |
+
+**Examples:**
+
 ```bash
-musoq tool execute my-tool --debug
+# Positional parameters
+musoq tool execute weather city London
+
+# Named parameters
+musoq tool execute weather --city London
+
+# Multiple parameters
+musoq tool execute weather city London min_temp 10
+
+# Mixed with options
+musoq tool execute weather city London --format json --debug
 ```
 
-**Expected Output:**
+**Debug Output:**
 ```
-Executing query: SELECT 'debug-output' as Result FROM #system.dual()
+Processing query for tool 'weather'...
+Processed Query:
+  SELECT city, temperature, conditions
+  FROM #weather.current('London')
+  WHERE temperature > 10
 
-┌──────────────┐
-│ Result       │
-├──────────────┤
-│ debug-output │
-└──────────────┘
+Executing...
 ```
 
----
+### 8.4 tool create
 
-#### Execute with Parameters
+Create a new tool from a template.
 
-**Command:**
+```
+musoq tool create <name>
+```
+
+### 8.5 tool folder
+
+Show or open the tools folder.
+
+```
+musoq tool folder [options]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--open` | Open folder in file explorer |
+
+**Examples:**
+
 ```bash
-musoq tool execute data-processor --param1 "value1" --param2 "value2"
+# Show path
+musoq tool folder
+# Output: /home/user/.musoq/Tools
+
+# Open folder
+musoq tool folder --open
 ```
 
-**Parameter formats:**
-- `--param value` - Named parameter with value
-- `--flag` - Boolean flag (sets to true)
-- `param value` - Positional parameter
+### 8.6 Tool Definition Format (YAML)
 
----
-
-#### Parameter Types and Syntax
-
-Different parameter types require different syntax in the query template:
-
-| Type     | Query Syntax      | Example              |
-|----------|-------------------|----------------------|
-| `string` | `'{{ param }}'`   | `'{{ path }}'`       |
-| `int`    | `{{ param }}`     | `{{ count }}`        |
-| `long`   | `{{ param }}`     | `{{ size }}`         |
-| `bool`   | `{{ param }}`     | `{{ recursive }}`    |
-| `float`  | `{{ param }}`     | `{{ threshold }}`    |
-
-**Key Rule:** String parameters need quotes in SQL, numeric/boolean parameters don't.
-
-</details>
-
-<details>
-<summary><h3>Tool YAML File Format</h3></summary>
-
-Tools are defined as YAML files stored in `~/.musoq/Tools/` directory (e.g., `C:\Users\<YourUser>\.musoq\Tools\` on Windows).
-
-#### Complete YAML Structure
-
-**File:** `~/.musoq/Tools/example-tool.yaml`
+Tools are defined in YAML files with the following schema:
 
 ```yaml
-name: tool-name
-description: Brief description of what the tool does
+name: weather
+description: Get current weather for a city
 query: |
-  SELECT
-    Column1,
-    '{{ string_param }}' as Text,
-    {{ numeric_param }} as Number
-  FROM #datasource.method('{{ path }}', {{ boolean_param }})
-  WHERE SomeCondition = {{ value }}
-  ORDER BY Column1 DESC
+  SELECT city, temperature, conditions
+  FROM #weather.current('{{city}}')
+  WHERE temperature > {{min_temp}}
+output:
+  format: table
 parameters:
-  - name: param1
+  - name: city
     type: string
     required: true
-    description: Description of parameter 1
-  - name: param2
+    description: City name to query
+  - name: min_temp
     type: int
     required: false
-    default: 100
-    description: Description of parameter 2
-  - name: param3
+    default: -50
+    description: Minimum temperature filter
+```
+
+**Schema Reference:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Unique tool identifier |
+| `description` | string | Yes | Human-readable description |
+| `query` | string | Yes | SQL query with `{{parameter}}` placeholders |
+| `output.format` | string | No | Default output format |
+| `parameters` | array | No | List of parameter definitions |
+
+**Parameter Definition Fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Parameter name (used in placeholders) |
+| `type` | string | Yes | One of: `string`, `int`, `long`, `decimal`, `bool`, `datetime` |
+| `required` | boolean | Yes | Whether the parameter must be provided |
+| `default` | any | No | Default value (for optional parameters) |
+| `description` | string | No | Human-readable description |
+
+**Supported Parameter Types:**
+
+| Type | Description | Example Values |
+|------|-------------|----------------|
+| `string` | Text value | `"London"`, `"SELECT * FROM table"` |
+| `int` | 32-bit integer | `42`, `-100` |
+| `long` | 64-bit integer | `9223372036854775807` |
+| `decimal` | High-precision decimal | `123.456789` |
+| `bool` | Boolean | `true`, `false` |
+| `datetime` | ISO 8601 date/time | `"2024-12-01"`, `"2024-12-01 15:30:00"` |
+
+### 8.7 Advanced Tool Examples
+
+**File Analysis Tool:**
+```yaml
+name: file_analysis
+description: Analyze files in a directory by extension
+query: |
+  SELECT 
+    Extension,
+    COUNT(*) AS FileCount,
+    SUM(Size) AS TotalSize
+  FROM #system.directory('{{path}}', {{recursive}})
+  GROUP BY Extension
+  ORDER BY TotalSize DESC
+output:
+  format: table
+parameters:
+  - name: path
+    type: string
+    required: true
+    description: Directory path to analyze
+  - name: recursive
     type: bool
     required: false
-    default: true
-    description: Description of parameter 3
-output:
-  format: table
+    default: false
+    description: Include subdirectories
 ```
 
----
-
-#### YAML Field Specifications
-
-| Field | Required | Type | Description | Example |
-|-------|----------|------|-------------|---------|
-| `name` | ✅ Yes | string | Unique tool identifier (no spaces) | `disk-usage` |
-| `description` | ✅ Yes | string | Brief explanation of tool purpose | `Analyze disk usage by file extension` |
-| `query` | ✅ Yes | string | SQL query with parameter placeholders | See examples below |
-| `parameters` | ✅ Yes | array | List of parameter definitions | See parameter format |
-| `output.format` | ✅ Yes | string | Output format (`table`, `json`, `csv`) | `table` |
-
----
-
-#### Parameter Definition Format
-
-Each parameter in the `parameters` array must have:
-
+**Docker Container Stats:**
 ```yaml
-- name: parameter_name        # Parameter identifier
-  type: parameter_type        # string, int, long, bool, float
-  required: true/false        # Is this parameter mandatory?
-  default: default_value      # Default value (optional params only)
-  description: help_text      # What this parameter does
-```
-
-**Parameter Types:**
-- `string` - Text values (use quotes in query: `'{{ param }}'`)
-- `int` - Integer numbers (no quotes: `{{ param }}`)
-- `long` - Long integers (no quotes: `{{ param }}`)
-- `bool` - Boolean values (no quotes: `{{ param }}`)
-- `float` - Floating point numbers (no quotes: `{{ param }}`)
-
----
-
-#### Example 1: Simple Greeting Tool
-
-**File:** `~/.musoq/Tools/greeting.yaml`
-
-```yaml
-name: greeting
-description: Display a personalized greeting
+name: docker_stats
+description: Show container resource usage
 query: |
-  SELECT
-    '{{ name }}' as Name,
-    'Hello, {{ name }}!' as Greeting,
-    {{ age }} as Age
-  FROM #system.dual()
-parameters:
-  - name: name
-    type: string
-    required: true
-    description: Your name
-  - name: age
-    type: int
-    required: false
-    default: 0
-    description: Your age
+  SELECT 
+    Name,
+    Status,
+    CpuPercent,
+    MemoryUsage,
+    NetworkIn,
+    NetworkOut
+  FROM #docker.containers()
+  WHERE Status = 'running'
+    AND CpuPercent > {{min_cpu}}
 output:
   format: table
-```
-
-**Usage:**
-```bash
-musoq tool execute greeting -- --name "Alice" --age 30
-```
-
-</details>
-
----
-
-## Logging and History
-
-<details>
-<summary><h3>View Query History</h3></summary>
-
-Display recent query execution logs with results.
-
-**Command:**
-```bash
-musoq log
-```
-
-**Expected Output (no history):**
-```
-No query execution logs found
-```
-
-**Expected Output (with history):**
-```
-Recent Query Execution Logs
-
-[2024-10-21 14:30:15] SUCCESS (125ms)
-Query: SELECT 1 FROM #system.dual()
-Rows: 1
-
-[2024-10-21 14:30:20] SUCCESS (98ms)
-Query: SELECT 2 FROM #system.dual()
-Rows: 1
-
-[2024-10-21 14:30:25] SUCCESS (103ms)
-Query: SELECT 3 FROM #system.dual()
-Rows: 1
-```
-
-</details>
-
-<details>
-<summary><h3>Limit Log Output</h3></summary>
-
-Control the number of log entries displayed.
-
-**Command:**
-```bash
-musoq log --count 2
-```
-
-**Expected Output:**
-```
-Recent Query Execution Logs (2)
-
-[2024-10-21 14:30:25] SUCCESS (103ms)
-Query: SELECT 3 FROM #system.dual()
-Rows: 1
-
-[2024-10-21 14:30:20] SUCCESS (98ms)
-Query: SELECT 2 FROM #system.dual()
-Rows: 1
-```
-
-</details>
-
-<details>
-<summary><h3>View Timestamps and Duration</h3></summary>
-
-Query logs include detailed timing information.
-
-**Command:**
-```bash
-musoq log
-```
-
-**Output includes:**
-- **Timestamp:** `[2024-10-21 12:34:56]` - When the query was executed
-- **Status:** `SUCCESS` or `FAILED` - Execution result
-- **Duration:** `125ms` - How long the query took to execute
-
-</details>
-
----
-
-## Base64 Encoding
-
-<details>
-<summary><h3>Encode Image to Base64</h3></summary>
-
-Convert image files to base64-encoded strings.
-
-#### Encode Regular File
-
-**Command:**
-```bash
-musoq image encode path/to/image.png
-```
-
-**Expected Output:**
-```
-iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==
+parameters:
+  - name: min_cpu
+    type: decimal
+    required: false
+    default: 0.0
+    description: Minimum CPU percentage filter
 ```
 
 ---
 
-#### Encode Small Binary File
+## 9. Scripts Management
 
-**Command:**
+SQL scripts are stored files in `~/.musoq/Scripts/` that can be executed by name.
+
+### 9.1 scripts list
+
+List all SQL scripts.
+
+```
+musoq scripts list
+```
+
+**Output Columns:**
+
+| Column | Description |
+|--------|-------------|
+| Name | Script filename (without .sql extension) |
+| Created | Creation timestamp |
+| Modified | Last modification timestamp |
+
+**Example Output:**
+```
+┌──────────────────────┬─────────────────────┬─────────────────────┐
+│ Name                 │ Created             │ Modified            │
+├──────────────────────┼─────────────────────┼─────────────────────┤
+│ daily_report         │ 2024-12-01 10:00:00 │ 2024-12-15 14:30:00 │
+│ file_analysis        │ 2024-12-10 08:00:00 │ 2024-12-10 08:00:00 │
+│ container_health     │ 2024-12-12 16:45:00 │ 2024-12-14 09:15:00 │
+└──────────────────────┴─────────────────────┴─────────────────────┘
+```
+
+### 9.2 scripts create
+
+Create a new SQL script and open in editor.
+
+```
+musoq scripts create <name>
+```
+
+**Examples:**
+
 ```bash
-musoq image encode path/to/small-file.bin
+# Create script (opens in editor)
+musoq scripts create my_analysis
+
+# Extension is added automatically
+musoq scripts create my_analysis.sql  # Same result
 ```
 
-**Expected Output:**
-```
-iVBORw0KGgo=
+**Default Template:**
+```sql
+-- Script: my_analysis
+-- Created: 2024-12-15 10:30:00
+-- 
+-- Write your SQL query below:
+
+SELECT * FROM #system.dual()
 ```
 
-**Note:** Despite the command name "image encode", it can encode any binary file, not just images.
+### 9.3 scripts update
 
-</details>
+Open an existing SQL script in the default editor.
+
+```
+musoq scripts update <name>
+```
+
+**Example:**
+```bash
+musoq scripts update daily_report
+# Opens ~/.musoq/Scripts/daily_report.sql in default editor
+```
+
+### 9.4 scripts delete
+
+Delete an SQL script.
+
+```
+musoq scripts delete <name>
+```
+
+**Example:**
+```bash
+musoq scripts delete old_report
+# Output: Successfully deleted script 'old_report'
+```
+
+### 9.5 scripts folder
+
+Show or open the SQL scripts folder.
+
+```
+musoq scripts folder [options]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--open` | Open folder in file explorer |
+
+**Examples:**
+
+```bash
+# Show path
+musoq scripts folder
+# Output: /home/user/.musoq/Scripts
+
+# Open folder
+musoq scripts folder --open
+```
+
+### 9.6 Running Scripts
+
+Scripts can be executed using the `run` command with the `@` prefix:
+
+```bash
+# Run by script name
+musoq run @daily_report
+
+# Run with output format
+musoq run @file_analysis --format json
+```
+
+See Section 5 (Query Execution) for complete `run` command options.
 
 ---
 
-## Troubleshooting
+## 10. Registry Management
 
-### Server Not Running
+Registries are sources for discovering and downloading data source plugins.
+
+### 10.1 registry list
+
+List all configured registries.
+
+```
+musoq registry list [options]
+```
+
+**Options:**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--enabled-only` | Show only enabled registries | false |
+
+**Output Columns:**
+
+| Column | Description |
+|--------|-------------|
+| Name | Registry identifier |
+| URL | Registry endpoint URL |
+| Default | Whether this is the default registry |
+| Enabled | Whether the registry is active |
+| Added At | Registration timestamp |
+
+**Example Output:**
+```
+┌──────────┬────────────────────────────────────────────────────────────────────────────────────────────────────────────┬─────────┬─────────┬─────────────────────┐
+│ Name     │ URL                                                                                                        │ Default │ Enabled │ Added At            │
+├──────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────┼─────────┼─────────┼─────────────────────┤
+│ official │ https://github.com/Puchaczov/Musoq.DataSources/releases/download/plugin-registry/plugin-registry.json      │ Yes     │ Yes     │ 2024-01-01 00:00:00 │
+│ custom   │ https://internal.company.com/registry.json                                                                 │ No      │ Yes     │ 2024-12-01 10:00:00 │
+└──────────┴────────────────────────────────────────────────────────────────────────────────────────────────────────────┴─────────┴─────────┴─────────────────────┘
+```
+
+### 10.2 registry show
+
+Show detailed information about a registry.
+
+```
+musoq registry show <name>
+```
+
+**Example Output:**
+```
+Registry: official
+
+URL:         https://registry.musoq.io/plugins.json
+Default:     Yes
+Enabled:     Yes
+Added At:    2024-01-01 00:00:00
+Description: Official Musoq plugin registry
+```
+
+### 10.3 registry add
+
+Add a new registry.
+
+```
+musoq registry add <name> <url> [options]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--default` | Set as default registry |
+| `--description <text>` | Registry description |
+| `--token <token>` | Authentication token (for private registries) |
+
+**Examples:**
+
+```bash
+# Add registry
+musoq registry add custom https://example.com/registry.json
+
+# Add as default
+musoq registry add internal https://internal.com/registry.json --default
+
+# Add with authentication
+musoq registry add private https://private.com/registry.json --token "abc123"
+
+# Add with description
+musoq registry add backup https://backup.com/registry.json --description "Backup registry"
+```
+
+### 10.4 registry remove
+
+Remove a registry.
+
+```
+musoq registry remove <name> [options]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--force` | Force removal of system registries |
+
+**Examples:**
+
+```bash
+# Remove custom registry
+musoq registry remove custom
+
+# Force remove (even if system registry)
+musoq registry remove official --force
+```
+
+### 10.5 registry update
+
+Update registry configuration.
+
+```
+musoq registry update <name> [options]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--url <url>` | New registry URL |
+| `--description <text>` | New description |
+
+**Examples:**
+
+```bash
+# Update URL
+musoq registry update custom --url https://new-url.com/registry.json
+
+# Update description
+musoq registry update custom --description "Updated description"
+```
+
+### 10.6 registry set-default
+
+Set a registry as the default.
+
+```
+musoq registry set-default <name>
+```
+
+**Example:**
+```bash
+musoq registry set-default custom
+# Output: Registry 'custom' is now the default
+```
+
+### 10.7 Registry File Format
+
+Registries use a JSON format to define available plugins:
+
+```json
+{
+  "plugins": [
+    {
+      "name": "Musoq.DataSources.Roslyn",
+      "shortName": "roslyn",
+      "description": "Query C# code with Roslyn",
+      "tags": ["code", "csharp", "analysis"],
+      "versions": [
+        {
+          "version": "7.2.0",
+          "releaseDate": "2024-12-01",
+          "downloadUrl": "https://...",
+          "sha256": "abc123...",
+          "platforms": ["windows-x64", "linux-x64", "osx-x64"]
+        }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+## 11. Configuration Management
+
+### 11.1 set - Set Configuration Values
+
+```
+musoq set <setting> <value>
+```
+
+**Available Settings:**
+
+| Setting | Description | Example |
+|---------|-------------|---------|
+| `organization-id` | Organization identifier | `musoq set organization-id org-123` |
+| `api-key` | API authentication key | `musoq set api-key key-abc-123` |
+| `labels` | Agent labels (space-separated) | `musoq set labels prod us-east` |
+| `update-data-sources` | Auto-update data sources | `musoq set update-data-sources true` |
+| `sso-url` | SSO authentication URL | `musoq set sso-url https://...` |
+| `agent-name` | Agent display name | `musoq set agent-name my-agent` |
+| `log-path` | Log file directory | `musoq set log-path /var/log/musoq` |
+| `environment-variable` | Set environment variable | `musoq set environment-variable KEY value` |
+
+### 11.2 get - Get System Information
+
+```
+musoq get <info>
+```
+
+**Available Information:**
+
+| Info | Description |
+|------|-------------|
+| `data-sources` | List loaded data sources |
+| `server-version` | Show server version |
+| `environment-variables` | List environment variables |
+| `environment-variables-file-path` | Path to env vars file |
+| `is-running` | Check if server is running |
+| `server-port` | Get server port number |
+| `licenses` | Show license information |
+| `startup-metrics` | Show startup performance metrics |
+
+**Options for `environment-variables`:**
+
+| Option | Description |
+|--------|-------------|
+| `--show-sensitive` | Include sensitive values |
+
+**Examples:**
+
 ```bash
 # Check if server is running
 musoq get is-running
+# Output: Server is running on port 5000
 
-# If not running, start it
-musoq serve
-```
+# or
+# Output: Server is not running
 
-### Plugin Not Found
-```bash
-# List available data sources
+# List data sources with details
 musoq get data-sources
 
-# For Python plugins, ensure server was restarted after creation
-musoq quit
-musoq serve
+# Show environment variables (masked)
+musoq get environment-variables
+
+# Show environment variables (including sensitive)
+musoq get environment-variables --show-sensitive
+
+# Get server version
+musoq get server-version
+# Output: Musoq v1.0.0
+
+# Get startup performance metrics
+musoq get startup-metrics
 ```
 
-### Query Execution Failed
+### 11.3 clear - Clear Configuration Values
+
+```
+musoq clear <setting>
+```
+
+All settings available in `set` can be cleared with `clear`.
+
+**Examples:**
+
 ```bash
-# Check recent logs for error details
+musoq clear organization-id
+musoq clear environment-variable MY_VAR
+musoq clear labels
+```
+
+---
+
+## 12. Bucket Management
+
+Buckets provide isolated contexts for query execution with preloaded data.
+
+### 12.1 bucket list
+
+List all storage buckets.
+
+```
+musoq bucket list
+```
+
+**Example Output:**
+```
+┌──────────────┬─────────────────────┬──────────┐
+│ Name         │ Created             │ Items    │
+├──────────────┼─────────────────────┼──────────┤
+│ my-data      │ 2024-12-01 10:00:00 │ 3        │
+│ test-env     │ 2024-12-05 14:30:00 │ 1        │
+└──────────────┴─────────────────────┴──────────┘
+```
+
+### 12.2 bucket create
+
+Create a new storage bucket.
+
+```
+musoq bucket create <name>
+```
+
+**Example:**
+```bash
+musoq bucket create analytics-data
+# Output: Bucket 'analytics-data' created successfully
+```
+
+### 12.3 bucket delete
+
+Delete a storage bucket.
+
+```
+musoq bucket delete <name>
+```
+
+**Example:**
+```bash
+musoq bucket delete old-data
+# Output: Bucket 'old-data' deleted successfully
+```
+
+### 12.4 Using Buckets in Queries
+
+Buckets allow you to preload data and reference it in queries:
+
+```bash
+# Create bucket
+musoq bucket create my-data
+
+# Run query with bucket context
+musoq run "SELECT * FROM #bucket.table()" --bucket my-data
+```
+
+---
+
+## 13. Utility Commands
+
+### 13.1 log - Show Query Logs
+
+Show recent query execution logs.
+
+```
+musoq log [options]
+```
+
+**Options:**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--count <n>` | Number of log entries to show | 10 |
+
+**Example:**
+```bash
 musoq log --count 5
 ```
 
-### Configuration Issues
-```bash
-# View environment variables
-musoq get environment-variables
+**Example Output:**
+```
+Query Log (Last 5 entries):
 
-# View environment variables file path
-musoq get environment-variables-file-path
+[2024-12-15 14:30:45] SELECT * FROM #system.dual()
+  Status: Success | Duration: 23ms | Rows: 1
 
-# Clear and reset an environment variable
-musoq clear environment-variable "VAR_NAME"
-musoq set environment-variable "VAR_NAME" "new-value"
+[2024-12-15 14:28:12] SELECT Name, Size FROM #system.directory('.', true)
+  Status: Success | Duration: 156ms | Rows: 42
+
+[2024-12-15 14:25:00] SELECT * FROM #weather.current('London')
+  Status: Error | Duration: 2500ms | Error: API_KEY not set
 ```
 
-### Python Plugin Issues
-```bash
-# List all Python plugin projects
-musoq python list
+### 13.2 separator - Input Stream Separator
 
-# Read plugin content to verify structure
-musoq python read plugin_name
+Insert a separator in the input stream (for piped input processing).
 
-# Show plugins directory location
-musoq python folder
-
-# Open plugins directory in file explorer
-musoq python folder --open
 ```
+musoq separator
+```
+
+This command is used when piping multiple queries through stdin to mark boundaries between queries.
+
+### 13.3 image encode - Encode Image to Base64
+
+Convert an image file to base64 encoding for use in queries.
+
+```
+musoq image encode <file>
+```
+
+**Example:**
+
+```bash
+musoq image encode photo.jpg
+# Output: data:image/jpeg;base64,/9j/4AAQSkZJRg...
+```
+
+### 13.4 api - List API Endpoints
+
+List available REST API endpoints.
+
+```
+musoq api [options]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--format <format>` | Output format: `table`, `json` |
+
+### 13.5 quit - Stop Server
+
+Stop the running Musoq server.
+
+```
+musoq quit
+```
+
+**Example:**
+```bash
+musoq quit
+# Output: Server shutdown complete
+```
+
+---
+
+## 14. API Reference
+
+The server exposes a REST API for programmatic access. By default, the server listens on `http://localhost:8585`. Complete API documentation is available via Swagger UI at `http://localhost:8585/swagger`.
+
+### 14.1 Core Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/application/server-version` | Get server version |
+| GET | `/application/is-ready` | Check server readiness |
+| GET | `/application/startup-metrics` | Get startup metrics |
+| GET | `/application/server-metrics` | Get runtime metrics |
+| POST | `/application/quit` | Shutdown server |
+
+**Example - Get Server Version:**
+```bash
+curl http://localhost:8585/application/server-version
+```
+```json
+{
+  "version": "1.0.0",
+  "buildDate": "2024-12-15T10:00:00Z"
+}
+```
+
+### 14.2 Query Execution
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/local/execute` | Execute SQL query |
+
+**Request Body:**
+
+```json
+{
+  "script": "SELECT * FROM #system.dual()",
+  "format": "json",
+  "bucket": "optional-bucket-name",
+  "unquoted": false,
+  "noHeader": false,
+  "executionDetails": false
+}
+```
+
+**Response (format: json):**
+```json
+{
+  "columns": ["Column1"],
+  "rows": [
+    {"Column1": 1}
+  ],
+  "executionDetails": {
+    "duration": "00:00:00.023",
+    "rowCount": 1
+  }
+}
+```
+
+### 14.3 Data Sources
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/data-sources` | List loaded data sources |
+| GET | `/data-sources/installed` | List installed plugins |
+| GET | `/data-sources/installed/{name}` | Get plugin details |
+| POST | `/data-sources/install` | Install plugin |
+| POST | `/data-sources/install-stream` | Install with progress streaming |
+| DELETE | `/data-sources/installed/{name}` | Uninstall plugin |
+| GET | `/data-sources/folder` | Get plugins folder path |
+| GET | `/data-sources/registry` | Search plugin registry |
+| POST | `/data-sources/force-refresh` | Refresh data sources |
+
+**Example - List Installed Plugins:**
+```bash
+curl http://localhost:5000/data-sources/installed
+```
+```json
+{
+  "plugins": [
+    {
+      "name": "Musoq.DataSources.Roslyn",
+      "version": "7.2.0",
+      "type": "DotNet",
+      "enabled": true,
+      "installedAt": "2024-12-15T10:00:00Z"
+    }
+  ]
+}
+```
+
+### 14.4 Tools
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/tools/management` | List tools |
+| GET | `/tools/management/{name}` | Get tool details |
+| POST | `/tools/management` | Create tool |
+| PUT | `/tools/management/{name}` | Update tool |
+| DELETE | `/tools/management/{name}` | Delete tool |
+| POST | `/tools/management/{name}/execute` | Execute tool |
+| GET | `/tools/management/folder` | Get tools folder path |
+
+**Example - Execute Tool:**
+```bash
+curl -X POST http://localhost:5000/tools/management/weather/execute \
+  -H "Content-Type: application/json" \
+  -d '{"parameters": {"city": "London"}}'
+```
+
+### 14.5 Scripts
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/scripts` | List scripts |
+| POST | `/scripts` | Create script |
+| GET | `/scripts/{name}/path` | Get script file path |
+| DELETE | `/scripts/{name}` | Delete script |
+| GET | `/scripts/folder` | Get scripts folder path |
+
+### 14.6 Registries
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/registries` | List registries |
+| GET | `/registries/{name}` | Get registry details |
+| POST | `/registries` | Add registry |
+| PUT | `/registries/{name}` | Update registry |
+| DELETE | `/registries/{name}` | Remove registry |
+| POST | `/registries/{name}/set-default` | Set default |
+
+### 14.7 Settings & Environment
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/settings` | Set configuration |
+| DELETE | `/settings` | Clear configuration |
+| GET | `/environment-variables` | List env vars |
+| POST | `/environment-variable` | Set env var |
+| GET | `/application/environment-variables-file-path` | Get env file path |
+
+### 14.8 Buckets
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/bucket/list` | List buckets |
+| POST | `/bucket/create/{name}` | Create bucket |
+| DELETE | `/bucket/delete/{name}` | Delete bucket |
+| POST | `/bucket/load/{name}` | Load data into bucket |
+| POST | `/bucket/unload/{name}` | Unload data from bucket |
+| POST | `/bucket/set/{name}` | Set bucket data |
+| POST | `/bucket/get/{name}` | Get bucket data |
+
+---
+
+## 15. Exit Codes & Error Handling
+
+The CLI returns the following exit codes:
+
+| Code | Name | Description |
+|------|------|-------------|
+| 0 | Success | Operation completed successfully |
+| 1 | QueryFailure | Query execution failed |
+| 2 | ServerCommunicationFailure | Cannot communicate with server |
+| 3 | ConfigurationError | Configuration problem |
+| 4 | NotFound | Requested resource not found |
+
+### 15.1 Common Error Scenarios
+
+**Server Not Running:**
+```
+Error: Cannot connect to server.
+Hint: Start the server with 'musoq serve'
+Exit code: 2
+```
+
+**Data Source Not Found:**
+```
+Error: Data source 'unknown_source' not found.
+Hint: Use 'musoq datasource list' to see available data sources
+Exit code: 4
+```
+
+**Query Syntax Error:**
+```
+Error: Query execution failed.
+  Line 1, Column 8: Expected FROM clause
+Exit code: 1
+```
+
+**Missing Environment Variable:**
+```
+Error: Required environment variable 'API_KEY' is not set.
+Hint: Use 'musoq set environment-variable API_KEY <value>' to set it
+Exit code: 3
+```
+
+---
+
+## 16. Configuration Files
+
+### 16.1 appsettings.json
+
+The main configuration file for the server:
+
+**Location:** 
+- Windows: `%APPDATA%\Musoq\appsettings.json`
+- Linux/macOS: `~/.config/musoq/appsettings.json`
+
+**Example:**
+```json
+{
+  "AutoShutdown": {
+    "Enabled": true,
+    "IdleTimeoutMinutes": 30
+  },
+  "Models": {
+    "Ollama": {
+      "ChatModel": "llama3",
+      "EmbeddingModel": "nomic-embed-text",
+      "Endpoint": "http://localhost:11434"
+    },
+    "OpenAi": {
+      "ChatModel": "gpt-4",
+      "EmbeddingModel": "text-embedding-ada-002"
+    }
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft": "Warning"
+    }
+  }
+}
+```
+
+### 16.2 settings.json
+
+User-specific settings managed via CLI:
+
+**Location:** `~/.musoq/settings.json`
+
+**Structure:**
+```json
+{
+  "agentName": "my-agent",
+  "labels": ["prod", "us-east"],
+  "logPath": "/var/log/musoq"
+}
+```
+
+### 16.3 environment-variables.json
+
+Environment variables for data sources:
+
+**Location:** `~/.musoq/environment-variables.json`
+
+**Structure:**
+```json
+{
+  "API_KEY": "sk-abc123",
+  "DATABASE_URL": "postgresql://localhost/mydb",
+  "WEATHER_API_KEY": "weather-key-456"
+}
+```
+
+---
+
+## 17. Examples & Workflows
+
+### 17.1 First-Time Setup
+
+```bash
+# Start the server
+musoq serve
+
+# Verify server is running
+musoq get is-running
+
+# Check available data sources
+musoq get data-sources
+
+# Run a simple query
+musoq run "SELECT 1 + 1 AS Result FROM #system.dual()"
+```
+
+### 17.2 Creating a Python Plugin
+
+```bash
+# Create new plugin from template
+musoq datasource create weather_api --template api
+
+# Edit the plugin (opens in editor)
+# Plugin created at ~/.musoq/Python/Scripts/weather_api/main.py
+
+# Refresh data sources
+musoq run "SELECT 1 FROM #system.dual()"  # Triggers reload
+
+# Use the new plugin
+musoq run "SELECT * FROM #weather_api.current('London')"
+```
+
+### 17.3 Working with Tools
+
+```bash
+# List available tools
+musoq tool list
+
+# Create a custom tool
+musoq tool create daily_report
+
+# Edit the tool definition (YAML)
+musoq tool folder --open
+
+# Execute tool with parameters
+musoq tool execute daily_report date 2024-01-15 format summary
+```
+
+### 17.4 Script-Based Workflow
+
+```bash
+# Create a reusable script
+musoq scripts create quarterly_analysis
+
+# Edit in your preferred editor
+# Script saved to ~/.musoq/Scripts/quarterly_analysis.sql
+
+# Run by name
+musoq run @quarterly_analysis
+
+# Run with different output format
+musoq run @quarterly_analysis --format json > results.json
+```
+
+### 17.5 CI/CD Integration
+
+```bash
+#!/bin/bash
+# Automated data quality check
+
+# Ensure server is running
+musoq serve --auto-shutdown
+
+# Run validation queries with non-interactive output
+musoq datasource install Musoq.DataSources.Roslyn --non-interactive
+
+# Execute analysis with JSON output for parsing
+result=$(musoq run "
+  SELECT Count(1) as ErrorCount 
+  FROM #csharp.solution('./MyProject.sln') s
+  CROSS APPLY s.Projects p
+  WHERE p.HasErrors = true
+" --format json)
+
+# Check results
+error_count=$(echo $result | jq '.[0].ErrorCount')
+if [ "$error_count" -gt 0 ]; then
+  echo "Found $error_count projects with errors"
+  exit 1
+fi
+
+echo "All projects validated successfully"
+```
+
+### 17.6 Piping Data
+
+```bash
+# Pipe JSON and format as CSV
+curl https://api.example.com/data | musoq run "
+  SELECT id, name, status
+  FROM #stdin.json()
+  WHERE status = 'active'
+" --format csv > active_records.csv
+```
+
+---
+
+## 17. Security Considerations
+
+### 17.1 Sensitive Data
+
+- **Environment Variables:** Stored in `~/.musoq/environment-variables.json`
+  - File permissions should be restricted (600 on Unix)
+  - Use `musoq get environment-variables` (masked by default)
+  - Use `--show-sensitive` only when necessary
+  - Use `{{ VAR_NAME}}` syntax in queries to reference environment variables from your operating system
+
+- **API Keys:** Never hardcode in queries or plugins
+  - Always use environment variables
+  - Consider using secret management tools
+
+### 17.2 Network Security
+
+- **Local Server:** Binds to `localhost` by default (127.0.0.1)
+- **Musoq:** Is not intended to be publicly accessible. There is no built-in authentication for external access and leaving endpoints opens to everybody would cause serious security issues.
+
+---
