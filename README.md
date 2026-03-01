@@ -93,11 +93,14 @@ wget -qO- https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/
 10. [Registry Management](#10-registry-management)
 11. [Configuration Management](#11-configuration-management)
 12. [Bucket Management](#12-bucket-management)
-13. [Utility Commands](#13-utility-commands)
-14. [API Reference](#14-api-reference)
-15. [Exit Codes & Error Handling](#15-exit-codes--error-handling)
-16. [Configuration Files](#16-configuration-files)
-17. [Security Considerations](#17-security-considerations)
+13. [MCP Context Management](#13-mcp-context-management)
+14. [Utility Commands](#14-utility-commands)
+15. [Specification Documents](#15-specification-documents)
+16. [API Reference](#16-api-reference)
+17. [Exit Codes & Error Handling](#17-exit-codes--error-handling)
+18. [Configuration Files](#18-configuration-files)
+19. [Examples & Workflows](#19-examples--workflows)
+20. [Security Considerations](#20-security-considerations)
 
 ---
 
@@ -662,6 +665,29 @@ musoq datasource folder my_plugin --open
 musoq datasource folder --open
 ```
 
+### 6.10 datasource update
+
+Update installed data sources from their registries.
+
+```bash
+musoq datasource update
+```
+
+### 6.11 datasource set-source
+
+Set the installation source for a data source.
+
+```bash
+musoq datasource set-source <name> <source>
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `<name>` | Name of the data source |
+| `<source>` | Source URL or registry reference |
+
 ---
 
 ## 7. Python Plugin Development
@@ -1088,19 +1114,59 @@ Processed Query:
 Executing...
 ```
 
-### 8.4 tool create
+### 8.4 tool preview
+
+Show how to execute a tool with placeholder parameters.
+
+```bash
+musoq tool preview <name>
+```
+
+### 8.5 tool create
 
 Create a new tool from a template.
 
-```
+```bash
 musoq tool create <name>
 ```
 
-### 8.5 tool folder
+### 8.6 tool update
+
+Open an existing tool for editing in the default editor.
+
+```bash
+musoq tool update <name>
+```
+
+### 8.7 tool clone
+
+Clone an existing tool into a new tool.
+
+```bash
+musoq tool clone <source>
+```
+
+### 8.8 tool rename
+
+Rename an existing tool.
+
+```bash
+musoq tool rename <name> <new-name>
+```
+
+### 8.9 tool delete
+
+Delete an existing tool.
+
+```bash
+musoq tool delete <name>
+```
+
+### 8.10 tool folder
 
 Show or open the tools folder.
 
-```
+```bash
 musoq tool folder [options]
 ```
 
@@ -1121,7 +1187,7 @@ musoq tool folder
 musoq tool folder --open
 ```
 
-### 8.6 Tool Definition Format (YAML)
+### 8.11 Tool Definition Format (YAML)
 
 Tools are defined in YAML files with the following schema:
 
@@ -1177,7 +1243,7 @@ parameters:
 | `bool` | Boolean | `true`, `false` |
 | `datetime` | ISO 8601 date/time | `"2024-12-01"`, `"2024-12-01 15:30:00"` |
 
-### 8.7 Advanced Tool Examples
+### 8.12 Advanced Tool Examples
 
 **File Analysis Tool:**
 ```yaml
@@ -1236,12 +1302,12 @@ parameters:
 
 SQL scripts are stored files in `~/.musoq/Scripts/` that can be executed by name.
 
-### 9.1 scripts list
+### 9.1 script list
 
 List all SQL scripts.
 
-```
-musoq scripts list
+```bash
+musoq script list
 ```
 
 **Output Columns:**
@@ -1263,22 +1329,22 @@ musoq scripts list
 └──────────────────────┴─────────────────────┴─────────────────────┘
 ```
 
-### 9.2 scripts create
+### 9.2 script create
 
 Create a new SQL script and open in editor.
 
 ```
-musoq scripts create <name>
+musoq script create <name>
 ```
 
 **Examples:**
 
 ```bash
 # Create script (opens in editor)
-musoq scripts create my_analysis
+musoq script create my_analysis
 
 # Extension is added automatically
-musoq scripts create my_analysis.sql  # Same result
+musoq script create my_analysis.sql  # Same result
 ```
 
 **Default Template:**
@@ -1291,40 +1357,56 @@ musoq scripts create my_analysis.sql  # Same result
 SELECT * FROM #system.dual()
 ```
 
-### 9.3 scripts update
+### 9.3 script update
 
 Open an existing SQL script in the default editor.
 
 ```
-musoq scripts update <name>
+musoq script update <name>
 ```
 
 **Example:**
 ```bash
-musoq scripts update daily_report
+musoq script update daily_report
 # Opens ~/.musoq/Scripts/daily_report.sql in default editor
 ```
 
-### 9.4 scripts delete
+### 9.4 script delete
 
 Delete an SQL script.
 
-```
-musoq scripts delete <name>
+```bash
+musoq script delete <name>
 ```
 
 **Example:**
 ```bash
-musoq scripts delete old_report
+musoq script delete old_report
 # Output: Successfully deleted script 'old_report'
 ```
 
-### 9.5 scripts folder
+### 9.5 script rename
+
+Rename an existing SQL script.
+
+```bash
+musoq script rename <name> <new-name>
+```
+
+### 9.6 script clone
+
+Clone an existing SQL script.
+
+```bash
+musoq script clone <source>
+```
+
+### 9.7 script folder
 
 Show or open the SQL scripts folder.
 
 ```
-musoq scripts folder [options]
+musoq script folder [options]
 ```
 
 **Options:**
@@ -1337,14 +1419,14 @@ musoq scripts folder [options]
 
 ```bash
 # Show path
-musoq scripts folder
+musoq script folder
 # Output: /home/user/.musoq/Scripts
 
 # Open folder
-musoq scripts folder --open
+musoq script folder --open
 ```
 
-### 9.6 Running Scripts
+### 9.8 Running Scripts
 
 Scripts can be executed using the `run` command with the `@` prefix:
 
@@ -1695,9 +1777,93 @@ musoq run "SELECT * FROM #bucket.table()" --bucket my-data
 
 ---
 
-## 13. Utility Commands
+## 13. MCP Context Management
 
-### 13.1 log - Show Query Logs
+MCP contexts provide per-context tool isolation, allowing different roles or projects to have distinct sets of enabled tools.
+
+### 13.1 mcp context list
+
+List all available contexts with tool counts.
+
+```bash
+musoq mcp context list
+```
+
+### 13.2 mcp context show
+
+Show details for a single context.
+
+```bash
+musoq mcp context show <name>
+```
+
+### 13.3 mcp context create
+
+Create a new context, optionally with a description.
+
+```bash
+musoq mcp context create <name> [options]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--description <text>` | Context description |
+
+### 13.4 mcp context clone
+
+Clone an existing context.
+
+```bash
+musoq mcp context clone <source-name>
+```
+
+### 13.5 mcp context rename
+
+Rename an existing context.
+
+```bash
+musoq mcp context rename <name> <new-name>
+```
+
+### 13.6 mcp context delete
+
+Delete a context.
+
+```bash
+musoq mcp context delete <name>
+```
+
+### 13.7 mcp context update
+
+Update context metadata.
+
+```bash
+musoq mcp context update <name> [options]
+```
+
+### 13.8 mcp context add-tool
+
+Add a tool to a context.
+
+```bash
+musoq mcp context add-tool <context-name> <tool-name>
+```
+
+### 13.9 mcp context remove-tool
+
+Remove a tool from a context.
+
+```bash
+musoq mcp context remove-tool <context-name> <tool-name>
+```
+
+---
+
+## 14. Utility Commands
+
+### 14.1 log - Show Query Logs
 
 Show recent query execution logs.
 
@@ -1730,7 +1896,7 @@ Query Log (Last 5 entries):
   Status: Error | Duration: 2500ms | Error: API_KEY not set
 ```
 
-### 13.2 separator - Input Stream Separator
+### 14.2 separator - Input Stream Separator
 
 Insert a separator in the input stream (for piped input processing).
 
@@ -1740,7 +1906,7 @@ musoq separator
 
 This command is used when piping multiple queries through stdin to mark boundaries between queries.
 
-### 13.3 image encode - Encode Image to Base64
+### 14.3 image encode - Encode Image to Base64
 
 Convert an image file to base64 encoding for use in queries.
 
@@ -1755,11 +1921,11 @@ musoq image encode photo.jpg
 # Output: data:image/jpeg;base64,/9j/4AAQSkZJRg...
 ```
 
-### 13.4 api - List API Endpoints
+### 14.4 api - List API Endpoints
 
 List available REST API endpoints.
 
-```
+```bash
 musoq api [options]
 ```
 
@@ -1769,7 +1935,21 @@ musoq api [options]
 |--------|-------------|
 | `--format <format>` | Output format: `table`, `json` |
 
-### 13.5 quit - Stop Server
+### 14.5 doctor - System Diagnostics
+
+Run environment and server diagnostics.
+
+```bash
+musoq doctor [options]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--json` | Print machine-readable diagnostics as JSON |
+
+### 14.6 quit - Stop Server
 
 Stop the running Musoq server.
 
@@ -1785,11 +1965,53 @@ musoq quit
 
 ---
 
-## 14. API Reference
+## 15. Specification Documents
+
+Access and view built-in Musoq specification documents directly from the CLI.
+
+```bash
+musoq spec <command>
+```
+
+### 15.1 spec list
+
+List all available specification documents.
+
+```bash
+musoq spec list
+```
+
+### 15.2 spec language
+
+Show the Musoq Core SQL Language specification.
+
+```bash
+musoq spec language
+```
+
+### 15.3 spec binary-text
+
+Show the Musoq Interpretation Schemas (Binary/Text) specification.
+
+```bash
+musoq spec binary-text
+```
+
+### 15.4 spec table-couple
+
+Show the Musoq TABLE and COUPLE Statements specification.
+
+```bash
+musoq spec table-couple
+```
+
+---
+
+## 16. API Reference
 
 The server exposes a REST API for programmatic access. By default, the server listens on `http://localhost:8585`. Complete API documentation is available via Swagger UI at `http://localhost:8585/swagger`.
 
-### 14.1 Core Endpoints
+### 16.1 Core Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -1810,7 +2032,7 @@ curl http://localhost:8585/application/server-version
 }
 ```
 
-### 14.2 Query Execution
+### 16.2 Query Execution
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -1843,7 +2065,7 @@ curl http://localhost:8585/application/server-version
 }
 ```
 
-### 14.3 Data Sources
+### 16.3 Data Sources
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -1875,7 +2097,7 @@ curl http://localhost:5000/data-sources/installed
 }
 ```
 
-### 14.4 Tools
+### 16.4 Tools
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -1894,7 +2116,7 @@ curl -X POST http://localhost:5000/tools/management/weather/execute \
   -d '{"parameters": {"city": "London"}}'
 ```
 
-### 14.5 Scripts
+### 16.5 Scripts
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -1904,7 +2126,7 @@ curl -X POST http://localhost:5000/tools/management/weather/execute \
 | DELETE | `/scripts/{name}` | Delete script |
 | GET | `/scripts/folder` | Get scripts folder path |
 
-### 14.6 Registries
+### 16.6 Registries
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -1915,7 +2137,7 @@ curl -X POST http://localhost:5000/tools/management/weather/execute \
 | DELETE | `/registries/{name}` | Remove registry |
 | POST | `/registries/{name}/set-default` | Set default |
 
-### 14.7 Settings & Environment
+### 16.7 Settings & Environment
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -1925,7 +2147,7 @@ curl -X POST http://localhost:5000/tools/management/weather/execute \
 | POST | `/environment-variable` | Set env var |
 | GET | `/application/environment-variables-file-path` | Get env file path |
 
-### 14.8 Buckets
+### 16.8 Buckets
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -1939,7 +2161,7 @@ curl -X POST http://localhost:5000/tools/management/weather/execute \
 
 ---
 
-## 15. Exit Codes & Error Handling
+## 17. Exit Codes & Error Handling
 
 The CLI returns the following exit codes:
 
@@ -1951,7 +2173,7 @@ The CLI returns the following exit codes:
 | 3 | ConfigurationError | Configuration problem |
 | 4 | NotFound | Requested resource not found |
 
-### 15.1 Common Error Scenarios
+### 17.1 Common Error Scenarios
 
 **Server Not Running:**
 ```
@@ -1983,9 +2205,9 @@ Exit code: 3
 
 ---
 
-## 16. Configuration Files
+## 18. Configuration Files
 
-### 16.1 appsettings.json
+### 18.1 appsettings.json
 
 The main configuration file for the server:
 
@@ -2020,7 +2242,7 @@ The main configuration file for the server:
 }
 ```
 
-### 16.2 settings.json
+### 18.2 settings.json
 
 User-specific settings managed via CLI:
 
@@ -2035,7 +2257,7 @@ User-specific settings managed via CLI:
 }
 ```
 
-### 16.3 environment-variables.json
+### 18.3 environment-variables.json
 
 Environment variables for data sources:
 
@@ -2052,9 +2274,9 @@ Environment variables for data sources:
 
 ---
 
-## 17. Examples & Workflows
+## 19. Examples & Workflows
 
-### 17.1 First-Time Setup
+### 19.1 First-Time Setup
 
 ```bash
 # Start the server
@@ -2070,7 +2292,7 @@ musoq get data-sources
 musoq run "SELECT 1 + 1 AS Result FROM #system.dual()"
 ```
 
-### 17.2 Creating a Python Plugin
+### 19.2 Creating a Python Plugin
 
 ```bash
 # Create new plugin from template
@@ -2086,7 +2308,7 @@ musoq run "SELECT 1 FROM #system.dual()"  # Triggers reload
 musoq run "SELECT * FROM #weather_api.current('London')"
 ```
 
-### 17.3 Working with Tools
+### 19.3 Working with Tools
 
 ```bash
 # List available tools
@@ -2102,11 +2324,11 @@ musoq tool folder --open
 musoq tool execute daily_report date 2024-01-15 format summary
 ```
 
-### 17.4 Script-Based Workflow
+### 19.4 Script-Based Workflow
 
 ```bash
 # Create a reusable script
-musoq scripts create quarterly_analysis
+musoq script create quarterly_analysis
 
 # Edit in your preferred editor
 # Script saved to ~/.musoq/Scripts/quarterly_analysis.sql
@@ -2118,7 +2340,7 @@ musoq run @quarterly_analysis
 musoq run @quarterly_analysis --format json > results.json
 ```
 
-### 17.5 CI/CD Integration
+### 19.5 CI/CD Integration
 
 ```bash
 #!/bin/bash
@@ -2148,7 +2370,7 @@ fi
 echo "All projects validated successfully"
 ```
 
-### 17.6 Piping Data
+### 19.6 Piping Data
 
 ```bash
 # Pipe JSON and format as CSV
@@ -2161,9 +2383,9 @@ curl https://api.example.com/data | musoq run "
 
 ---
 
-## 17. Security Considerations
+## 20. Security Considerations
 
-### 17.1 Sensitive Data
+### 20.1 Sensitive Data
 
 - **Environment Variables:** Stored in `~/.musoq/environment-variables.json`
   - File permissions should be restricted (600 on Unix)
@@ -2175,7 +2397,7 @@ curl https://api.example.com/data | musoq run "
   - Always use environment variables
   - Consider using secret management tools
 
-### 17.2 Network Security
+### 20.2 Network Security
 
 - **Local Server:** Binds to `localhost` by default (127.0.0.1)
 - **Musoq:** Is not intended to be publicly accessible. There is no built-in authentication for external access and leaving endpoints opens to everybody would cause serious security issues.
