@@ -95,23 +95,21 @@ if (Test-Path $musoqExe) {
 
 $repoOwner = "Puchaczov"
 $repoName = "Musoq.CLI"
-$apiUrl = "https://api.github.com/repos/$repoOwner/$repoName/releases"
-
-Write-Debug "Fetching releases from $apiUrl..."
-try {
-    $releases = Invoke-RestMethod -Uri $apiUrl -UseBasicParsing
-} catch {
-    Write-Error "Failed to fetch releases. API returned: $($_.Exception.Message)"
-    exit 1
-}
-if (-not $releases) { Write-Error "No releases found."; exit 1 }
-Write-Debug "Fetched releases: $($releases.Count) found."
-Write-Host "$Version"
 
 if ($Version) {
+    $apiUrl = "https://api.github.com/repos/$repoOwner/$repoName/releases"
     Write-Debug "Version parameter provided: $Version"
     $normalizedVersion = NormalizeVersion $Version -githubFormat
     Write-Debug "Normalized version for GitHub comparison: $normalizedVersion"
+    Write-Debug "Fetching releases from $apiUrl..."
+    try {
+        $releases = Invoke-RestMethod -Uri $apiUrl -UseBasicParsing
+    } catch {
+        Write-Error "Failed to fetch releases. API returned: $($_.Exception.Message)"
+        exit 1
+    }
+    if (-not $releases) { Write-Error "No releases found."; exit 1 }
+    Write-Debug "Fetched releases: $($releases.Count) found."
     $releaseFilter = $releases | Where-Object { ($_.tag_name.TrimStart('v').Trim()) -eq $normalizedVersion }
     if (-not $releaseFilter) {
         Write-Error "Release version $normalizedVersion not found on GitHub."
@@ -119,9 +117,14 @@ if ($Version) {
     }
     $latestRelease = $releaseFilter | Select-Object -First 1
 } else {
-    $latestRelease = $releases | Where-Object { $_.tag_name -match '^\d+\.\d+\.\d+$' } |
-                     Sort-Object { [version]($_.tag_name.TrimStart('v')) } -Descending |
-                     Select-Object -First 1
+    $apiUrl = "https://api.github.com/repos/$repoOwner/$repoName/releases/latest"
+    Write-Debug "Fetching latest release from $apiUrl..."
+    try {
+        $latestRelease = Invoke-RestMethod -Uri $apiUrl -UseBasicParsing
+    } catch {
+        Write-Error "Failed to fetch latest release. API returned: $($_.Exception.Message)"
+        exit 1
+    }
 }
 if (-not $latestRelease) { Write-Error "No valid release version found."; exit 1 }
 Write-Debug "Selected release: $($latestRelease.tag_name)"

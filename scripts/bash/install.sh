@@ -184,17 +184,16 @@ fi
 
 repoOwner="Puchaczov"
 repoName="Musoq.CLI"
-apiUrl="https://api.github.com/repos/$repoOwner/$repoName/releases"
 
-echo "Fetching releases from $apiUrl..."
-releases=$(curl -sL "$apiUrl") || { echo "Failed to fetch releases."; exit 1; }
-if [ -z "$releases" ]; then
-  echo "No releases found."
-  exit 1
-fi
-
-# Determine release: if a version is provided, filter for it; else, use the latest proper release.
+# Determine release: if a version is provided, filter for it; else, use the latest release.
 if [ -n "$VERSION" ]; then
+  apiUrl="https://api.github.com/repos/$repoOwner/$repoName/releases"
+  echo "Fetching releases from $apiUrl..."
+  releases=$(curl -sL "$apiUrl") || { echo "Failed to fetch releases."; exit 1; }
+  if [ -z "$releases" ]; then
+    echo "No releases found."
+    exit 1
+  fi
   normVersion=$(normalize_version $VERSION github)
   release=$(echo "$releases" | jq -r --arg ver "$normVersion" 'map(select(.tag_name | ltrimstr("v") == $ver)) | .[0]')
   if [ "$release" == "null" ] || [ -z "$release" ]; then
@@ -202,16 +201,13 @@ if [ -n "$VERSION" ]; then
     exit 1
   fi
 else
-  # Modified jq query to properly sort semantic versions
-  release=$(echo "$releases" | jq -r '
-    map(select(.tag_name|test("^[0-9]+\\.[0-9]+\\.[0-9]+$")))
-    | sort_by(
-        .tag_name | split(".")
-        | map(tonumber)
-        | .[0] * 1000000 + .[1] * 1000 + .[2]
-    )
-    | reverse | .[0]
-  ')
+  apiUrl="https://api.github.com/repos/$repoOwner/$repoName/releases/latest"
+  echo "Fetching latest release from $apiUrl..."
+  release=$(curl -sL "$apiUrl") || { echo "Failed to fetch latest release."; exit 1; }
+  if [ -z "$release" ] || [ "$(echo "$release" | jq -r '.tag_name')" == "null" ]; then
+    echo "No latest release found."
+    exit 1
+  fi
 fi
 
 releaseTag=$(echo "$release" | jq -r '.tag_name')
