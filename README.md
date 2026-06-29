@@ -302,6 +302,9 @@ musoq run <input> [options]
 | `--no-header` | Skip header row in output | false |
 | `--stacktrace` | Include stack trace in error output | false |
 | `--execution-details` | Show execution phase and progress details | false |
+| `--profile` | Return normal query rows and write profile diagnostics to stderr | false |
+| `--explain-analyze` | Return normal query rows and write explain-analyze diagnostics to stderr | false |
+| `--diagnostics-format <format>` | Diagnostics output format: `text`, `json`, or `both` | `text` |
 | `--from-file` | Treat input as file path | false |
 
 **Examples:**
@@ -327,6 +330,12 @@ musoq run "SELECT Name, Size FROM #os.files('.')" --format csv --no-header
 
 # Show execution progress for long-running queries
 musoq run "SELECT * FROM #os.files('/', true)" --execution-details
+
+# Return rows on stdout and write profile diagnostics to stderr
+musoq run "SELECT * FROM #os.files('.', true)" --profile --diagnostics-format both
+
+# Return rows on stdout and write an annotated runtime plan to stderr
+musoq run "SELECT Name FROM #os.files('.', true)" --explain-analyze
 ```
 
 ### 5.2 Standard Input Piping
@@ -358,7 +367,23 @@ curl https://api.example.com/data | musoq run "SELECT id, name FROM #stdin.json(
 | `interpreted_yaml` | yaml | Interpreted YAML (preserves structure) | Structured data as YAML |
 | `reconstructed_yaml` | yaml | Reconstructed YAML (path-value mode) | Flattened YAML output |
 
-### 5.4 Script Resolution
+### 5.4 Query Diagnostics
+
+`--profile` and `--explain-analyze` keep query results on stdout. Diagnostic text and JSON are written to stderr after the row formatter succeeds, so scripts can pipe query rows without mixing them with profiling output.
+
+The flags are mutually exclusive:
+
+| Flag | Behavior |
+|------|----------|
+| `--profile` | Executes the original query and writes source/operator profile diagnostics. |
+| `--explain-analyze` | Executes the original query with full instrumentation and writes an annotated execution plan with actual row counts and timings. |
+| `--diagnostics-format text` | Writes engine-rendered diagnostics text. |
+| `--diagnostics-format json` | Writes structured diagnostics JSON. |
+| `--diagnostics-format both` | Writes text first, then structured JSON. |
+
+SQL diagnostic commands are still supported as normal query text. `PROFILE SELECT ...` and `EXPLAIN ANALYZE SELECT ...` return their diagnostic text table as the query result instead of using the stderr side channel.
+
+### 5.5 Script Resolution
 
 When the input doesn't look like a SQL query, the CLI attempts to resolve it as a script:
 
@@ -367,7 +392,7 @@ When the input doesn't look like a SQL query, the CLI attempts to resolve it as 
 3. If found, execute the script contents
 4. If not found, treat input as a raw query
 
-### 5.5 Query Transformation
+### 5.6 Query Transformation
 
 The CLI performs the following transformations before execution:
 
@@ -2037,6 +2062,7 @@ curl http://localhost:8585/application/server-version
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/local/execute` | Execute SQL query |
+| GET | `/local/query-diagnostics/{id}` | Retrieve profile or explain-analyze diagnostics for a completed local query |
 
 **Request Body:**
 
@@ -2047,9 +2073,12 @@ curl http://localhost:8585/application/server-version
   "bucket": "optional-bucket-name",
   "unquoted": false,
   "noHeader": false,
-  "executionDetails": false
+  "executionDetails": false,
+  "diagnosticsMode": "profile"
 }
 ```
+
+`diagnosticsMode` is optional. Supported values are `none`, `profile`, and `explainAnalyze`; invalid values return HTTP 400.
 
 **Response (format: json):**
 ```json
@@ -2064,6 +2093,38 @@ curl http://localhost:8585/application/server-version
   }
 }
 ```
+
+When diagnostics are requested and available, `/local/execute` includes these response headers:
+
+| Header | Description |
+|--------|-------------|
+| `X-Musoq-Diagnostics-Id` | Opaque id for the sidecar diagnostics payload. |
+| `X-Musoq-Diagnostics-Mode` | `profile` or `explainAnalyze`. |
+
+Fetch the sidecar payload with:
+
+```bash
+curl http://localhost:8585/local/query-diagnostics/{id}
+```
+
+**Diagnostics response:**
+
+```json
+{
+  "mode": "profile",
+  "text": "Musoq query profile...",
+  "profile": {
+    "totalElapsedMilliseconds": 12.3,
+    "queryId": "query-1",
+    "sources": [],
+    "operators": []
+  },
+  "executionPlanText": null,
+  "runtimeContractSignature": "runtime-v2:..."
+}
+```
+
+Diagnostics payloads are stored in a bounded in-memory sidecar cache for about 10 minutes. Unknown or expired ids return HTTP 404.
 
 ### 16.3 Data Sources
 
