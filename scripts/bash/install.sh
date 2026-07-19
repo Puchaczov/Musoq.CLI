@@ -27,6 +27,10 @@ fail() {
   return 1
 }
 
+to_lower() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+}
+
 parse_arguments() {
   VERSION=""
   CHANNEL=""
@@ -49,12 +53,12 @@ parse_arguments() {
         ;;
       -c|--channel)
         [[ $# -ge 2 ]] || { fail "$1 requires a channel."; return 2; }
-        CHANNEL="${2,,}"
+        CHANNEL="$(to_lower "$2")"
         shift 2
         ;;
       --channel=*)
         CHANNEL="${1#*=}"
-        CHANNEL="${CHANNEL,,}"
+        CHANNEL="$(to_lower "$CHANNEL")"
         shift
         ;;
       -h|--help)
@@ -88,7 +92,8 @@ parse_arguments() {
 }
 
 is_supported_channel() {
-  local candidate="${1,,}"
+  local candidate
+  candidate="$(to_lower "$1")"
   local channel
   for channel in "${SUPPORTED_CHANNELS[@]}"; do
     [[ "$candidate" == "$channel" ]] && return 0
@@ -226,7 +231,8 @@ validate_release_metadata() {
 
 select_release_for_channel() {
   local releases_json="$1"
-  local requested_channel="${2,,}"
+  local requested_channel
+  requested_channel="$(to_lower "$2")"
   is_supported_channel "$requested_channel" || return 1
 
   local selected="" selected_version="" release tag version channel prerelease comparison
@@ -278,7 +284,8 @@ fetch_release_by_version() {
 }
 
 fetch_release_for_channel() {
-  local requested_channel="${1,,}"
+  local requested_channel
+  requested_channel="$(to_lower "$1")"
   if [[ "$requested_channel" == stable ]]; then
     local release
     release=$(github_get "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest") || {
@@ -379,7 +386,7 @@ verify_asset_digest() {
   [[ "$digest" =~ ^sha256:[0-9A-Fa-f]{64}$ ]] || { fail "Unsupported asset digest '$digest'."; return 1; }
   local expected="${digest#sha256:}" actual
   actual=$(calculate_sha256 "$file") || return 1
-  [[ "${actual,,}" == "${expected,,}" ]] || {
+  [[ "$(to_lower "$actual")" == "$(to_lower "$expected")" ]] || {
     fail "SHA-256 mismatch for '$(basename "$file")'."
     return 1
   }
@@ -536,7 +543,7 @@ install_release() (
   local release_json="$1"
   local release_tag="$2"
   local asset_name asset asset_url asset_digest
-  asset_name=$(get_platform_asset_name) || return 1
+  asset_name=$(get_platform_asset_name "$(get_os)" "$(get_arch)") || return 1
   asset=$(select_asset "$release_json" "$asset_name") || return 1
   asset_url=$(jq -r '.browser_download_url' <<< "$asset")
   asset_digest=$(jq -r '.digest // empty' <<< "$asset")
