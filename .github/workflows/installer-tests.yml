@@ -1,0 +1,43 @@
+name: Installer tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'tests/**'
+      - 'README.md'
+      - '.github/workflows/installer-tests.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'tests/**'
+      - 'README.md'
+      - '.github/workflows/installer-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  bash:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Bash installer syntax
+        run: bash -n scripts/bash/install.sh
+      - name: Run Bash installer tests
+        run: bash tests/bash/installer-tests.sh
+
+  powershell:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Windows PowerShell 5.1 installer tests
+        shell: powershell
+        run: .\tests\powershell\Installer.Tests.ps1
+      - name: Run PowerShell 7 installer tests
+        shell: pwsh
+        run: .\tests\powershell\Installer.Tests.ps1

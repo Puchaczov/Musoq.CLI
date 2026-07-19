@@ -16,10 +16,26 @@ Musoq.CLI is a powerful command-line interface that brings the magic of [Musoq](
 
 ### Install / Update
 
-Powershell:
+The installer follows the latest stable release unless a channel or exact version is requested. Channel selection is one-shot: rerun with the same channel to update within it, or omit the channel to return to stable.
+
+PowerShell (run from an elevated shell):
 
 ```powershell
 irm https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/powershell/install.ps1 | iex
+```
+
+Install the latest release from an exact prerelease channel:
+
+```powershell
+$installer = irm https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/powershell/install.ps1
+& ([scriptblock]::Create($installer)) -Channel alpha
+```
+
+Install an exact version, including a custom SemVer prerelease:
+
+```powershell
+$installer = irm https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/powershell/install.ps1
+& ([scriptblock]::Create($installer)) -Version 0.40.0-alpha.1
 ```
 
 Shell using curl:
@@ -28,11 +44,27 @@ Shell using curl:
 curl -fsSL https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/bash/install.sh | sudo bash
 ```
 
+Install the latest release from an exact prerelease channel:
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/bash/install.sh | sudo bash -s -- --channel alpha
+```
+
+Install an exact version:
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/bash/install.sh | sudo bash -s -- --version 0.40.0-alpha.1
+```
+
 Shell using wget:
 
 ```shell
 wget -qO- https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/bash/install.sh | sudo bash
 ```
+
+Supported named channels are `stable`, `alpha`, `beta`, and `rc`. They are exact tracks: `alpha` never selects a beta, release candidate, or stable release. Other valid SemVer prereleases such as `preview.3` can be installed only with an exact version. `--version`/`-Version` and `--channel`/`-Channel` are mutually exclusive.
+
+Changing the requested channel may intentionally install a numerically older version. For example, running the default stable installer after an alpha installation switches the machine back to the latest stable release. The installer verifies the exact platform asset and its GitHub SHA-256 digest before replacing the current installation.
 
 ### Remove
 
