@@ -212,7 +212,8 @@ function Get-ReleaseByChannel {
     $page = 1
     do {
         try {
-            $pageReleases = @(Invoke-GitHubApi "https://api.github.com/repos/$($script:RepoOwner)/$($script:RepoName)/releases?per_page=100&page=$page")
+            $apiResponse = Invoke-GitHubApi "https://api.github.com/repos/$($script:RepoOwner)/$($script:RepoName)/releases?per_page=100&page=$page"
+            $pageReleases = @($apiResponse)
         }
         catch {
             Throw-InstallerError "Failed to fetch release page $page from GitHub: $($_.Exception.Message)"

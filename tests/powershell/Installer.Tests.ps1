@@ -94,7 +94,7 @@ Assert-Equal $false ($decodedCommand.Contains(") 'alpha'")) 'in-memory elevation
 function Invoke-GitHubApi([string]$Uri) {
     if ($Uri.EndsWith('/releases/latest')) { return @($releases | Where-Object tag_name -ceq '1.2.0')[0] }
     if ($Uri.EndsWith('/releases/tags/1.3.0-alpha.10')) { return @($releases | Where-Object tag_name -ceq '1.3.0-alpha.10')[0] }
-    if ($Uri -match 'releases\?per_page=100&page=1') { return $releases }
+    if ($Uri -match 'releases\?per_page=100&page=1') { return ,$releases }
     throw "Unexpected mock URI: $Uri"
 }
 Assert-Equal '1.2.0' (Get-ReleaseByChannel stable).tag_name 'stable API resolution'
