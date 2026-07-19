@@ -304,7 +304,10 @@ fetch_release_for_channel() {
       return 1
     }
     page_count=$(jq 'length' <<< "$page_json")
-    all_releases=$(jq -cn --argjson existing "$all_releases" --argjson page "$page_json" '$existing + $page')
+    all_releases=$(printf '%s\n%s\n' "$all_releases" "$page_json" | jq -cs '.[0] + .[1]') || {
+      fail "Failed to combine GitHub release pages."
+      return 1
+    }
     (( page_count < 100 )) && break
     ((page++))
   done
