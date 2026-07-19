@@ -16,7 +16,7 @@ Musoq.CLI is a powerful command-line interface that brings the magic of [Musoq](
 
 ### Install / Update
 
-The installer follows the latest stable release unless a channel or exact version is requested. Channel selection is one-shot: rerun with the same channel to update within it, or omit the channel to return to stable.
+The installer follows the latest stable release unless a channel or exact version is requested. Channel selection is one-shot: rerun with the same channel to update within it, or omit the channel to return to stable. System binaries are installed as administrator/root-owned files; configuration and plugins remain per-user.
 
 PowerShell (run from an elevated shell):
 
@@ -64,11 +64,11 @@ wget -qO- https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/
 
 Supported named channels are `stable`, `alpha`, `beta`, and `rc`. They are exact tracks: `alpha` never selects a beta, release candidate, or stable release. Other valid SemVer prereleases such as `preview.3` can be installed only with an exact version. `--version`/`-Version` and `--channel`/`-Channel` are mutually exclusive.
 
-Changing the requested channel may intentionally install a numerically older version. For example, running the default stable installer after an alpha installation switches the machine back to the latest stable release. The installer verifies the exact platform asset and its GitHub SHA-256 digest before replacing the current installation.
+Changing the requested channel may intentionally install a numerically older version. For example, running the default stable installer after an alpha installation switches the machine back to the latest stable release. The installer verifies the exact platform asset and its GitHub SHA-256 digest before replacing the current installation; releases without a valid SHA-256 digest are rejected. The POSIX installer supports Linux and Intel macOS through `/usr/local/bin` symlinks and does not alter shell profile files.
 
 ### Remove
 
-Powershell:
+PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/powershell/remove.ps1 | iex
@@ -83,8 +83,21 @@ curl -fsSL https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main
 Shell using wget:
 
 ```shell
-wget -qO- https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/bash/remove.sh | sudo sh
+wget -qO- https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/bash/remove.sh | sudo bash
 ```
+
+Normal removal deletes the system installation and managed PATH/symlink entries but preserves configuration and plugins. Use purge only when you also want to remove per-user data (`%APPDATA%\Musoq` and `~\.musoq` on Windows; `~/.config/musoq` and `~/.musoq` on Linux/macOS):
+
+```powershell
+$remover = irm https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/powershell/remove.ps1
+& ([scriptblock]::Create($remover)) -Purge
+```
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/bash/remove.sh | sudo bash -s -- --purge
+```
+
+The installers no longer create or remove the legacy shared temporary `AgentLocal` directory.
 
 ## 🏃 Quick Start
 

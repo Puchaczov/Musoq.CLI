@@ -43,15 +43,53 @@ try {
     $digest = 'sha256:' + (Get-FileHash $tempFile -Algorithm SHA256).Hash.ToLowerInvariant()
     Assert-Equal $true (Test-AssetDigest $tempFile $digest) 'valid digest passes'
     Assert-Throws { Test-AssetDigest $tempFile 'sha256:0000' } 'invalid digest fails'
-    Assert-Equal $true (Test-AssetDigest $tempFile $null) 'missing legacy digest passes'
+    Assert-Throws { Test-AssetDigest $tempFile $null } 'missing digest is rejected'
 }
 finally { Remove-Item $tempFile -Force }
+
+$stagingParent = Join-Path ([IO.Path]::GetTempPath()) ('MusoqInstallerTests.' + [guid]::NewGuid().ToString('N'))
+try {
+    New-Item -Path $stagingParent -ItemType Directory -ErrorAction Stop | Out-Null
+    $firstStagingDirectory = New-InstallerStagingDirectory $stagingParent
+    $secondStagingDirectory = New-InstallerStagingDirectory $stagingParent
+    Assert-Equal $true (Test-Path -LiteralPath $firstStagingDirectory -PathType Container) 'first staging directory is created'
+    Assert-Equal $false ($firstStagingDirectory -ceq $secondStagingDirectory) 'staging directory names are unique'
+    Assert-Throws { New-InstallerStagingDirectory (Join-Path $stagingParent 'missing') } 'missing staging parent is rejected'
+}
+finally { Remove-Item $stagingParent -Recurse -Force -ErrorAction SilentlyContinue }
+
+$transactionParent = Join-Path ([IO.Path]::GetTempPath()) ('MusoqTransactionTests.' + [guid]::NewGuid().ToString('N'))
+try {
+    $installDirectory = Join-Path $transactionParent 'Musoq'
+    $preparedDirectory = Join-Path $transactionParent 'prepared-success'
+    New-Item -Path $installDirectory, $preparedDirectory -ItemType Directory -ErrorAction Stop | Out-Null
+    [IO.File]::WriteAllText((Join-Path $installDirectory 'Musoq.exe'), 'old')
+    [IO.File]::WriteAllText((Join-Path $preparedDirectory 'Musoq.exe'), 'new')
+    Invoke-InstallDirectoryTransaction -PreparedDirectory $preparedDirectory -InstallDirectory $installDirectory
+    Assert-Equal 'new' ([IO.File]::ReadAllText((Join-Path $installDirectory 'Musoq.exe'))) 'prepared directory replaces existing install'
+
+    $failingPreparedDirectory = Join-Path $transactionParent 'prepared-failure'
+    New-Item -Path $failingPreparedDirectory -ItemType Directory -ErrorAction Stop | Out-Null
+    [IO.File]::WriteAllText((Join-Path $installDirectory 'Musoq.exe'), 'old-again')
+    [IO.File]::WriteAllText((Join-Path $failingPreparedDirectory 'Musoq.exe'), 'new-but-failing')
+    $script:RollbackActionWasCalled = $false
+    Assert-Throws {
+        Invoke-InstallDirectoryTransaction -PreparedDirectory $failingPreparedDirectory -InstallDirectory $installDirectory -PostInstallAction { throw 'simulated post-install failure' } -RollbackPostInstallAction { $script:RollbackActionWasCalled = $true }
+    } 'post-install failure rolls back install directory'
+    Assert-Equal $true $script:RollbackActionWasCalled 'rollback action is called'
+    Assert-Equal 'old-again' ([IO.File]::ReadAllText((Join-Path $installDirectory 'Musoq.exe'))) 'failed transaction restores previous install'
+}
+finally { Remove-Item $transactionParent -Recurse -Force -ErrorAction SilentlyContinue }
 
 $fileArguments = Get-ElevationArguments -ScriptPath 'C:\install.ps1' -Version '1.3.0-alpha.10' -Channel $null -DebugEnabled $true
 Assert-Equal $true ($fileArguments -contains '1.3.0-alpha.10') 'elevation forwards exact version'
 Assert-Equal $true ($fileArguments -contains '-Debug') 'elevation forwards debug'
 $memoryArguments = Get-ElevationArguments -ScriptPath $null -Version $null -Channel 'alpha' -DebugEnabled $false
 Assert-Equal $true ($memoryArguments -contains '-EncodedCommand') 'in-memory elevation uses encoded redownload command'
+$encodedCommand = $memoryArguments[$memoryArguments.IndexOf('-EncodedCommand') + 1]
+$decodedCommand = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($encodedCommand))
+Assert-Equal $true ($decodedCommand.Contains("& ([scriptblock]::Create(`$content)) -Channel 'alpha'")) 'in-memory elevation preserves channel binding'
+Assert-Equal $false ($decodedCommand.Contains(") 'alpha'")) 'in-memory elevation does not pass channel positionally'
 
 function Invoke-GitHubApi([string]$Uri) {
     if ($Uri.EndsWith('/releases/latest')) { return @($releases | Where-Object tag_name -ceq '1.2.0')[0] }

@@ -1,62 +1,154 @@
 param(
-    [switch]$Debug
+    [switch]$Debug,
+    [switch]$Purge,
+    [string]$OriginalUserProfile,
+    [string]$OriginalAppData
 )
 
-if ($Debug) { $DebugPreference = "Continue" } else { $DebugPreference = "SilentlyContinue" }
+$script:RemoverUrl = 'https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/powershell/remove.ps1'
 
-# Elevate if not running as Administrator
-if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
-    [Security.Principal.WindowsBuiltInRole] "Administrator"))
-{
-    Write-Host "Script is not running as Administrator. Relaunching with elevated rights..."
-    Start-Process powershell.exe -ArgumentList "-NoProfile", "-ExecutionPolicy Bypass", "-File `"$PSCommandPath`"" -Verb RunAs
-    exit
+function Throw-RemoverError {
+    param([Parameter(Mandatory)][string]$Message)
+    throw [System.InvalidOperationException]::new($Message)
 }
 
-$installDir = Join-Path $env:ProgramFiles "Musoq"
+function Get-RemovalElevationArguments {
+    param(
+        [string]$ScriptPath,
+        [bool]$DebugEnabled,
+        [bool]$PurgeEnabled,
+        [string]$UserProfile,
+        [string]$AppData
+    )
 
-# New: Check if Musoq is installed; if not, exit immediately.
-if (-not (Test-Path $installDir)) {
-    Write-Host "Musoq is not installed on this machine."
-    exit 0
+    $arguments = @()
+    if ($DebugEnabled) { $arguments += '-Debug' }
+    if ($PurgeEnabled) { $arguments += '-Purge' }
+    if ($UserProfile) { $arguments += @('-OriginalUserProfile', $UserProfile) }
+    if ($AppData) { $arguments += @('-OriginalAppData', $AppData) }
+
+    if ($ScriptPath) {
+        return @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f $ScriptPath)) + $arguments
+    }
+
+    $invocation = "`$content = Invoke-RestMethod -Uri '$($script:RemoverUrl)'; & ([scriptblock]::Create(`$content))"
+    if ($DebugEnabled) { $invocation += ' -Debug' }
+    if ($PurgeEnabled) { $invocation += ' -Purge' }
+    if ($UserProfile) { $invocation += " -OriginalUserProfile '$($UserProfile.Replace("'", "''"))'" }
+    if ($AppData) { $invocation += " -OriginalAppData '$($AppData.Replace("'", "''"))'" }
+    $bytes = [Text.Encoding]::Unicode.GetBytes($invocation)
+    return @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', [Convert]::ToBase64String($bytes))
 }
 
-$musoqExe = Join-Path $installDir "Musoq.exe"
+function Test-IsAdministrator {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
 
-function StopMusoq {
-    param([string]$path)
-    Write-Host "Stopping running Musoq instance if exists..."
-    try {
-        $currentLocation = Get-Location
-        Set-Location $path
-        & "./Musoq.exe" quit
-        Start-Sleep -Seconds 10
-        Set-Location $currentLocation
-    } catch {
-        Write-Debug "Error while stopping Musoq: $($_.Exception.Message)"
+function Restart-RemoverElevated {
+    param([bool]$DebugEnabled, [bool]$PurgeEnabled, [string]$UserProfile, [string]$AppData)
+    $arguments = Get-RemovalElevationArguments -ScriptPath $PSCommandPath -DebugEnabled $DebugEnabled -PurgeEnabled $PurgeEnabled -UserProfile $UserProfile -AppData $AppData
+    $process = Start-Process powershell.exe -ArgumentList $arguments -Verb RunAs -PassThru -Wait -ErrorAction Stop
+    if ($process.ExitCode -ne 0) {
+        Throw-RemoverError "The elevated remover failed with exit code $($process.ExitCode)."
     }
 }
 
-# Stop Musoq if running
-if (Test-Path $musoqExe) {
-    StopMusoq -path $installDir
+function Stop-Musoq {
+    param([Parameter(Mandatory)][string]$InstallDirectory)
+
+    $executablePath = Join-Path $InstallDirectory 'Musoq.exe'
+    if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) { return }
+
+    Write-Host 'Stopping running Musoq instance if it exists...'
+    & $executablePath quit 2>$null
+    $deadline = [DateTime]::UtcNow.AddSeconds(20)
+    do {
+        $matchingProcesses = @()
+        foreach ($process in @(Get-Process -Name Musoq -ErrorAction SilentlyContinue)) {
+            try {
+                if ($process.Path -ceq $executablePath) { $matchingProcesses += $process }
+            }
+            catch { }
+        }
+        if ($matchingProcesses.Count -eq 0) { return }
+        Start-Sleep -Seconds 1
+    } while ([DateTime]::UtcNow -lt $deadline)
+
+    Throw-RemoverError 'Musoq did not stop within 20 seconds.'
 }
 
-# Remove installation directory
-Write-Host "Removing Musoq installation from $installDir..."
-Remove-Item -Path $installDir -Recurse -Force
+function Remove-MachinePathEntry {
+    param([Parameter(Mandatory)][string]$InstallDirectory)
 
-# Remove installDir from system PATH
-$currentPath = [Environment]::GetEnvironmentVariable("Path", [EnvironmentVariableTarget]::Machine)
-if ($currentPath.Split(';') -contains $installDir) {
-    Write-Host "Removing $installDir from system PATH..."
-    $newPath = ($currentPath.Split(';') | Where-Object { $_ -ne $installDir }) -join ';'
-    [Environment]::SetEnvironmentVariable("Path", $newPath, [EnvironmentVariableTarget]::Machine)
-    Write-Host "Updating current session PATH..."
-    $env:Path = ($env:Path.Split(';') | Where-Object { $_ -ne $installDir }) -join ';'
+    $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    $segments = @($machinePath -split ';' | Where-Object { $_ -and $_ -cne $InstallDirectory })
+    $updatedPath = $segments -join ';'
+    if ($updatedPath -cne $machinePath) {
+        [Environment]::SetEnvironmentVariable('Path', $updatedPath, 'Machine')
+    }
+    $env:Path = (@($env:Path -split ';' | Where-Object { $_ -and $_ -cne $InstallDirectory }) -join ';')
 }
 
-Write-Host "Musoq has been successfully removed."
+function Get-UserDataPaths {
+    param([string]$UserProfile, [string]$AppData)
 
-Write-Host "`nPress Enter to close this window..."
-Read-Host
+    $paths = @()
+    if ($AppData) { $paths += Join-Path $AppData 'Musoq' }
+    if ($UserProfile) { $paths += Join-Path $UserProfile '.musoq' }
+    return $paths
+}
+
+function Remove-UserData {
+    param([Parameter(Mandatory)][string[]]$Paths)
+    foreach ($path in $Paths) {
+        if (Test-Path -LiteralPath $path) {
+            Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
+            Write-Host "Removed user data $path"
+        }
+    }
+}
+
+function Invoke-MusoqRemover {
+    param(
+        [bool]$DebugEnabled,
+        [bool]$PurgeEnabled,
+        [string]$UserProfile,
+        [string]$AppData,
+        [string]$InstallDirectory = (Join-Path $env:ProgramFiles 'Musoq')
+    )
+
+    $DebugPreference = if ($DebugEnabled) { 'Continue' } else { 'SilentlyContinue' }
+    $callerProfile = if ($UserProfile) { $UserProfile } else { $env:USERPROFILE }
+    $callerAppData = if ($AppData) { $AppData } else { $env:APPDATA }
+    if (-not (Test-IsAdministrator)) {
+        Write-Host 'Relaunching the Musoq remover with elevated rights...'
+        Restart-RemoverElevated -DebugEnabled $DebugEnabled -PurgeEnabled $PurgeEnabled -UserProfile $callerProfile -AppData $callerAppData
+        return
+    }
+
+    if (Test-Path -LiteralPath $InstallDirectory) {
+        Stop-Musoq $InstallDirectory
+        Remove-Item -LiteralPath $InstallDirectory -Recurse -Force -ErrorAction Stop
+        Write-Host "Removed installation directory $InstallDirectory"
+    }
+    else {
+        Write-Host "Installation directory $InstallDirectory does not exist."
+    }
+
+    Remove-MachinePathEntry $InstallDirectory
+    if ($PurgeEnabled) {
+        Remove-UserData (Get-UserDataPaths -UserProfile $callerProfile -AppData $callerAppData)
+    }
+    Write-Host 'Musoq removal completed.'
+}
+
+if ($env:MUSOQ_REMOVER_SOURCE_ONLY -ne '1') {
+    try {
+        Invoke-MusoqRemover -DebugEnabled ([bool]$Debug) -PurgeEnabled ([bool]$Purge) -UserProfile $OriginalUserProfile -AppData $OriginalAppData
+    }
+    catch {
+        throw
+    }
+}

@@ -28,6 +28,14 @@ assert_succeeds() {
   fi
 }
 
+file_mode() {
+  if stat -c '%a' "$1" >/dev/null 2>&1; then
+    stat -c '%a' "$1"
+  else
+    stat -f '%Lp' "$1"
+  fi
+}
+
 assert_fails() {
   local message="$1"
   shift
@@ -70,12 +78,48 @@ assert_equal "Musoq-linux-x64.zip" "$(jq -r .name <<< "$asset")" "asset selectio
 assert_fails "AgentLocal name is not accepted as Musoq" select_asset "$alpha" Musoq.Cloud.AgentLocal.Api-linux-arm64.zip
 
 temp_file=$(mktemp)
-trap 'rm -f "$temp_file"' EXIT
+test_root=$(mktemp -d)
+trap 'rm -f "$temp_file"; rm -rf "$test_root"' EXIT
 printf 'musoq-test' > "$temp_file"
 digest="sha256:$(calculate_sha256 "$temp_file")"
 assert_succeeds "valid digest passes" verify_asset_digest "$temp_file" "$digest"
 assert_fails "invalid digest fails" verify_asset_digest "$temp_file" "sha256:0000"
-assert_succeeds "missing legacy digest warns and passes" verify_asset_digest "$temp_file" ""
+assert_fails "missing digest is rejected" verify_asset_digest "$temp_file" ""
+
+staging_directory=$(create_staging_directory "$test_root")
+assert_equal "700" "$(file_mode "$staging_directory")" "staging directory is private"
+mkdir -p "$staging_directory/payload/DataSources"
+printf '#!/bin/sh\n' > "$staging_directory/payload/Musoq"
+printf 'data' > "$staging_directory/payload/DataSources/asset.txt"
+set_install_modes "$staging_directory/payload"
+assert_equal "755" "$(file_mode "$staging_directory/payload")" "install directory mode is immutable"
+assert_equal "755" "$(file_mode "$staging_directory/payload/Musoq")" "executable mode is preserved"
+assert_equal "644" "$(file_mode "$staging_directory/payload/DataSources/asset.txt")" "data files are not world writable"
+
+managed_symlink_paths() { printf '%s\n' "$test_root/bin/Musoq" "$test_root/bin/musoq"; }
+mkdir -p "$test_root/bin" "$test_root/install"
+MUSOQ_EXE="$test_root/install/Musoq"
+touch "$MUSOQ_EXE" "$test_root/bin/Musoq"
+assert_fails "regular symlink collision is rejected" preflight_managed_symlinks
+rm "$test_root/bin/Musoq"
+assert_succeeds "managed symlinks are created" install_managed_symlinks
+assert_succeeds "managed symlinks pass preflight" preflight_managed_symlinks
+
+INSTALL_DIR="$test_root/transaction/Musoq"
+MUSOQ_EXE="$INSTALL_DIR/Musoq"
+managed_symlink_paths() { printf '%s\n' "$test_root/transaction-bin/Musoq" "$test_root/transaction-bin/musoq"; }
+mkdir -p "$INSTALL_DIR" "$test_root/transaction-bin" "$test_root/prepared-success"
+printf 'old' > "$INSTALL_DIR/Musoq"
+printf 'new' > "$test_root/prepared-success/Musoq"
+assert_succeeds "prepared install replaces existing tree" replace_installation "$test_root/prepared-success"
+assert_equal "new" "$(<"$INSTALL_DIR/Musoq")" "replacement activates the prepared tree"
+
+mkdir -p "$test_root/prepared-failure"
+printf 'old-again' > "$INSTALL_DIR/Musoq"
+printf 'new-but-failing' > "$test_root/prepared-failure/Musoq"
+install_managed_symlinks() { return 1; }
+assert_fails "failed post-swap action restores previous tree" replace_installation "$test_root/prepared-failure"
+assert_equal "old-again" "$(<"$INSTALL_DIR/Musoq")" "failed replacement restores previous tree"
 
 github_get() {
   case "$1" in

@@ -260,10 +260,9 @@ function Test-AssetDigest {
         [string]$Digest
     )
     if (-not $Digest) {
-        Write-Warning 'Release asset has no GitHub digest; continuing for legacy compatibility.'
-        return $true
+        Throw-InstallerError 'Release asset is missing a SHA-256 digest.'
     }
-    if (-not $Digest.StartsWith('sha256:', [System.StringComparison]::OrdinalIgnoreCase)) {
+    if ($Digest -notmatch '^sha256:[0-9A-Fa-f]{64}$') {
         Throw-InstallerError "Unsupported asset digest '$Digest'."
     }
     $expected = $Digest.Substring(7)
@@ -272,6 +271,17 @@ function Test-AssetDigest {
         Throw-InstallerError "SHA-256 mismatch for '$(Split-Path $Path -Leaf)'."
     }
     return $true
+}
+
+function New-InstallerStagingDirectory {
+    param([Parameter(Mandatory)][string]$ParentDirectory)
+
+    if (-not (Test-Path -LiteralPath $ParentDirectory -PathType Container)) {
+        Throw-InstallerError "Staging parent '$ParentDirectory' does not exist."
+    }
+    $path = Join-Path $ParentDirectory ('.Musoq.staging.' + [guid]::NewGuid().ToString('N'))
+    New-Item -Path $path -ItemType Directory -ErrorAction Stop | Out-Null
+    return $path
 }
 
 function Get-ElevationArguments {
@@ -292,10 +302,15 @@ function Get-ElevationArguments {
     }
 
     $invocation = "`$content = Invoke-RestMethod -Uri '$($script:InstallerUrl)'; & ([scriptblock]::Create(`$content))"
-    foreach ($argument in $installerArguments) {
-        $escaped = $argument.Replace("'", "''")
-        $invocation += " '$escaped'"
+    if ($Version) {
+        $escapedVersion = $Version.Replace("'", "''")
+        $invocation += " -Version '$escapedVersion'"
     }
+    if ($Channel) {
+        $escapedChannel = $Channel.ToLowerInvariant().Replace("'", "''")
+        $invocation += " -Channel '$escapedChannel'"
+    }
+    if ($DebugEnabled) { $invocation += ' -Debug' }
     $bytes = [Text.Encoding]::Unicode.GetBytes($invocation)
     return @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', [Convert]::ToBase64String($bytes))
 }
@@ -303,7 +318,10 @@ function Get-ElevationArguments {
 function Restart-InstallerElevated {
     param([string]$Version, [string]$Channel, [bool]$DebugEnabled)
     $arguments = Get-ElevationArguments -ScriptPath $PSCommandPath -Version $Version -Channel $Channel -DebugEnabled $DebugEnabled
-    Start-Process powershell.exe -ArgumentList $arguments -Verb RunAs | Out-Null
+    $process = Start-Process powershell.exe -ArgumentList $arguments -Verb RunAs -PassThru -Wait -ErrorAction Stop
+    if ($process.ExitCode -ne 0) {
+        Throw-InstallerError "The elevated installer failed with exit code $($process.ExitCode)."
+    }
 }
 
 function Test-IsAdministrator {
@@ -313,14 +331,108 @@ function Test-IsAdministrator {
 }
 
 function Stop-Musoq {
-    param([string]$Path)
-    try {
-        Push-Location $Path
-        & '.\Musoq.exe' quit
-        Start-Sleep -Seconds 20
+    param([Parameter(Mandatory)][string]$Path)
+
+    $executablePath = Join-Path $Path 'Musoq.exe'
+    if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) { return }
+
+    Write-Host 'Stopping running Musoq instance if it exists...'
+    & $executablePath quit 2>$null
+    $deadline = [DateTime]::UtcNow.AddSeconds(20)
+    do {
+        $matchingProcesses = @()
+        foreach ($process in @(Get-Process -Name Musoq -ErrorAction SilentlyContinue)) {
+            try {
+                if ($process.Path -ceq $executablePath) { $matchingProcesses += $process }
+            }
+            catch { }
+        }
+        if ($matchingProcesses.Count -eq 0) { return }
+        Start-Sleep -Seconds 1
+    } while ([DateTime]::UtcNow -lt $deadline)
+
+    Throw-InstallerError 'Musoq did not stop within 20 seconds.'
+}
+
+function Get-MachinePathState {
+    param([Parameter(Mandatory)][string]$InstallDirectory)
+
+    $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    $segments = @($machinePath -split ';' | Where-Object { $_ })
+    $changed = -not ($segments -contains $InstallDirectory)
+    [pscustomobject]@{
+        InstallDirectory = $InstallDirectory
+        Changed = $changed
+        OriginalMachinePath = $machinePath
+        OriginalSessionPath = $env:Path
+        UpdatedMachinePath = if ($changed) { (@($segments) + $InstallDirectory) -join ';' } else { $machinePath }
     }
-    catch { Write-Debug "Unable to stop Musoq cleanly: $($_.Exception.Message)" }
-    finally { Pop-Location }
+}
+
+function Set-MachinePathState {
+    param([Parameter(Mandatory)]$State)
+    if (-not $State.Changed) { return }
+    [Environment]::SetEnvironmentVariable('Path', $State.UpdatedMachinePath, 'Machine')
+    $env:Path = "$($env:Path);$($State.InstallDirectory)"
+}
+
+function Restore-MachinePathState {
+    param([Parameter(Mandatory)]$State)
+    if (-not $State.Changed) { return }
+    [Environment]::SetEnvironmentVariable('Path', $State.OriginalMachinePath, 'Machine')
+    $env:Path = $State.OriginalSessionPath
+}
+
+function Invoke-InstallDirectoryTransaction {
+    param(
+        [Parameter(Mandatory)][string]$PreparedDirectory,
+        [Parameter(Mandatory)][string]$InstallDirectory,
+        [scriptblock]$PostInstallAction,
+        [scriptblock]$RollbackPostInstallAction
+    )
+
+    $installParent = Split-Path -Parent $InstallDirectory
+    $backupContainer = $null
+    $backupDirectory = $null
+    $movedExisting = $false
+    $movedPrepared = $false
+    $succeeded = $false
+    try {
+        if (Test-Path -LiteralPath $InstallDirectory) {
+            $backupContainer = New-InstallerStagingDirectory $installParent
+            $backupDirectory = Join-Path $backupContainer 'previous'
+            Move-Item -LiteralPath $InstallDirectory -Destination $backupDirectory -ErrorAction Stop
+            $movedExisting = $true
+        }
+
+        Move-Item -LiteralPath $PreparedDirectory -Destination $InstallDirectory -ErrorAction Stop
+        $movedPrepared = $true
+        if ($PostInstallAction) { & $PostInstallAction }
+        $succeeded = $true
+    }
+    catch {
+        $failure = $_
+        if ($RollbackPostInstallAction) {
+            try { & $RollbackPostInstallAction } catch { }
+        }
+        if ($movedPrepared -and (Test-Path -LiteralPath $InstallDirectory)) {
+            Remove-Item -LiteralPath $InstallDirectory -Recurse -Force -ErrorAction Stop
+        }
+        if ($movedExisting -and (Test-Path -LiteralPath $backupDirectory)) {
+            Move-Item -LiteralPath $backupDirectory -Destination $InstallDirectory -ErrorAction Stop
+        }
+        throw $failure
+    }
+    finally {
+        if ($backupContainer -and (Test-Path -LiteralPath $backupContainer)) {
+            if ($succeeded) {
+                Remove-Item -LiteralPath $backupContainer -Recurse -Force -ErrorAction Stop
+            }
+            else {
+                Remove-Item -LiteralPath $backupContainer -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
 }
 
 function Install-MusoqRelease {
@@ -328,49 +440,35 @@ function Install-MusoqRelease {
 
     $assetName = Get-WindowsAssetName
     $asset = Select-ReleaseAsset -Release $Release -ExpectedName $assetName
-    $cacheDirectory = Join-Path $env:TEMP 'MusoqCache'
-    $cacheFile = Join-Path $cacheDirectory $assetName
-    $extractDirectory = Join-Path $env:TEMP 'MusoqTemp'
     $installDirectory = Join-Path $env:ProgramFiles 'Musoq'
+    $installParent = Split-Path -Parent $installDirectory
+    $stagingDirectory = New-InstallerStagingDirectory $installParent
+    $cacheFile = Join-Path $stagingDirectory $assetName
+    $extractDirectory = Join-Path $stagingDirectory 'prepared'
 
-    New-Item -Path $cacheDirectory -ItemType Directory -Force | Out-Null
     try {
         Write-Host "Downloading $($asset.browser_download_url)..."
         Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $cacheFile -UseBasicParsing -ErrorAction Stop
         [void](Test-AssetDigest -Path $cacheFile -Digest ([string]$asset.digest))
 
-        if (Test-Path $extractDirectory) { Remove-Item $extractDirectory -Recurse -Force }
-        New-Item -Path $extractDirectory -ItemType Directory -Force | Out-Null
-        Expand-Archive -Path $cacheFile -DestinationPath $extractDirectory -Force
+        New-Item -Path $extractDirectory -ItemType Directory -ErrorAction Stop | Out-Null
+        Expand-Archive -Path $cacheFile -DestinationPath $extractDirectory -Force -ErrorAction Stop
         $extractedExecutable = Join-Path $extractDirectory 'Musoq.exe'
         if (-not (Test-Path $extractedExecutable)) {
             Throw-InstallerError 'Archive does not contain Musoq.exe.'
         }
 
-        if (Test-Path (Join-Path $installDirectory 'Musoq.exe')) { Stop-Musoq $installDirectory }
-        if (Test-Path $installDirectory) { Remove-Item $installDirectory -Recurse -Force }
-        New-Item -Path $installDirectory -ItemType Directory -Force | Out-Null
-        Get-ChildItem $extractDirectory | Copy-Item -Destination $installDirectory -Recurse -Force
-
-        $dataSources = Join-Path $installDirectory 'DataSources'
-        if (Test-Path $dataSources) {
-            $acl = Get-Acl $dataSources
-            $identity = [Security.Principal.SecurityIdentifier]::new('S-1-1-0')
-            $rule = [Security.AccessControl.FileSystemAccessRule]::new($identity, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
-            $acl.SetAccessRule($rule)
-            Set-Acl $dataSources $acl
-        }
-
-        $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
-        if (-not ($machinePath.Split(';') -contains $installDirectory)) {
-            [Environment]::SetEnvironmentVariable('Path', "$machinePath;$installDirectory", 'Machine')
-            $env:Path = "$($env:Path);$installDirectory"
+        Stop-Musoq $installDirectory
+        $pathState = Get-MachinePathState $installDirectory
+        Invoke-InstallDirectoryTransaction -PreparedDirectory $extractDirectory -InstallDirectory $installDirectory -PostInstallAction {
+            Set-MachinePathState $pathState
+        } -RollbackPostInstallAction {
+            Restore-MachinePathState $pathState
         }
         Write-Host "Musoq.CLI version $($Release.tag_name) was installed and added to PATH."
     }
     finally {
-        if (Test-Path $extractDirectory) { Remove-Item $extractDirectory -Recurse -Force }
-        if (Test-Path $cacheFile) { Remove-Item $cacheFile -Force }
+        if (Test-Path -LiteralPath $stagingDirectory) { Remove-Item -LiteralPath $stagingDirectory -Recurse -Force -ErrorAction SilentlyContinue }
     }
 }
 
@@ -421,7 +519,6 @@ if ($env:MUSOQ_INSTALLER_SOURCE_ONLY -ne '1') {
         Invoke-MusoqInstaller -Version $Version -Channel $Channel -DebugEnabled ([bool]$Debug)
     }
     catch {
-        Write-Error $_.Exception.Message
-        exit 1
+        throw
     }
 }

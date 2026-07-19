@@ -7,7 +7,6 @@ REPO_OWNER="Puchaczov"
 REPO_NAME="Musoq.CLI"
 INSTALL_DIR="/opt/Musoq"
 MUSOQ_EXE="$INSTALL_DIR/Musoq"
-INSTALLER_URL="https://raw.githubusercontent.com/Puchaczov/Musoq.CLI/refs/heads/main/scripts/bash/install.sh"
 SUPPORTED_CHANNELS=(stable alpha beta rc)
 SEMVER_PATTERN='(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?(\+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?'
 
@@ -374,10 +373,10 @@ verify_asset_digest() {
   local file="$1"
   local digest="${2:-}"
   if [[ -z "$digest" || "$digest" == null ]]; then
-    echo "Warning: release asset has no GitHub digest; continuing for legacy compatibility." >&2
-    return 0
+    fail "Release asset is missing a SHA-256 digest."
+    return 1
   fi
-  [[ "$digest" == sha256:* ]] || { fail "Unsupported asset digest '$digest'."; return 1; }
+  [[ "$digest" =~ ^sha256:[0-9A-Fa-f]{64}$ ]] || { fail "Unsupported asset digest '$digest'."; return 1; }
   local expected="${digest#sha256:}" actual
   actual=$(calculate_sha256 "$file") || return 1
   [[ "${actual,,}" == "${expected,,}" ]] || {
@@ -388,7 +387,7 @@ verify_asset_digest() {
 
 check_dependencies() {
   local command
-  for command in curl jq unzip uname; do
+  for command in curl jq unzip uname find readlink pgrep; do
     command -v "$command" >/dev/null 2>&1 || { fail "Missing dependency: $command"; return 1; }
   done
 
@@ -407,10 +406,130 @@ check_dependencies() {
   fi
 }
 
+create_staging_directory() {
+  local parent_directory="$1"
+  [[ -d "$parent_directory" ]] || {
+    fail "Staging parent '$parent_directory' does not exist."
+    return 1
+  }
+  (umask 077; mktemp -d "$parent_directory/.Musoq.staging.XXXXXX")
+}
+
+set_install_modes() {
+  local directory="$1"
+  find "$directory" -type d -exec chmod 755 {} + || return 1
+  find "$directory" -type f -exec chmod 644 {} + || return 1
+  chmod 755 "$directory/Musoq"
+}
+
+set_install_ownership() {
+  chown -R root:root "$1"
+}
+
+managed_symlink_paths() {
+  printf '%s\n' /usr/local/bin/Musoq /usr/local/bin/musoq
+}
+
+preflight_managed_symlinks() {
+  local link target
+  while IFS= read -r link; do
+    if [[ -L "$link" ]]; then
+      target=$(readlink "$link") || return 1
+      [[ "$target" == "$MUSOQ_EXE" ]] || {
+        fail "Refusing to replace unmanaged symlink '$link'."
+        return 1
+      }
+    elif [[ -e "$link" ]]; then
+      fail "Refusing to replace non-symlink path '$link'."
+      return 1
+    fi
+  done < <(managed_symlink_paths)
+}
+
+install_managed_symlinks() {
+  local link
+  while IFS= read -r link; do
+    [[ -L "$link" ]] || ln -s "$MUSOQ_EXE" "$link" || return 1
+  done < <(managed_symlink_paths)
+}
+
+musoq_is_running() {
+  local operating_system pid executable
+  operating_system=$(uname -s)
+  if [[ "$operating_system" == Linux ]]; then
+    while IFS= read -r pid; do
+      [[ -L "/proc/$pid/exe" ]] || continue
+      executable=$(readlink -f "/proc/$pid/exe") || continue
+      [[ "$executable" == "$MUSOQ_EXE" ]] && return 0
+    done < <(pgrep -x Musoq 2>/dev/null || true)
+    return 1
+  fi
+
+  pgrep -f "^${MUSOQ_EXE}([[:space:]]|$)" >/dev/null 2>&1
+}
+
 stop_musoq() {
+  [[ -x "$MUSOQ_EXE" ]] || return 0
+
   echo "Stopping running Musoq instance if it exists..."
-  pkill -f Musoq 2>/dev/null || true
-  sleep 5
+  "$MUSOQ_EXE" quit >/dev/null 2>&1 || true
+
+  local deadline=$((SECONDS + 20))
+  while musoq_is_running; do
+    if (( SECONDS >= deadline )); then
+      fail "Musoq did not stop within 20 seconds."
+      return 1
+    fi
+    sleep 1
+  done
+}
+
+remove_created_symlinks() {
+  local link target
+  for link in "$@"; do
+    [[ -L "$link" ]] || continue
+    target=$(readlink "$link") || continue
+    [[ "$target" == "$MUSOQ_EXE" ]] && rm -f -- "$link"
+  done
+}
+
+replace_installation() {
+  local prepared_directory="$1"
+  local install_parent backup_container="" backup_directory="" link
+  local -a missing_links=()
+  local moved_existing=0 moved_new=0
+
+  install_parent=$(dirname "$INSTALL_DIR")
+  while IFS= read -r link; do
+    [[ -L "$link" ]] || missing_links+=("$link")
+  done < <(managed_symlink_paths)
+
+  if [[ -e "$INSTALL_DIR" ]]; then
+    backup_container=$(create_staging_directory "$install_parent") || return 1
+    backup_directory="$backup_container/previous"
+    mv -- "$INSTALL_DIR" "$backup_directory" || {
+      rm -rf -- "$backup_container"
+      return 1
+    }
+    moved_existing=1
+  fi
+
+  if ! mv -- "$prepared_directory" "$INSTALL_DIR"; then
+    if (( moved_existing )); then mv -- "$backup_directory" "$INSTALL_DIR" || true; fi
+    [[ -n "$backup_container" ]] && rm -rf -- "$backup_container"
+    return 1
+  fi
+  moved_new=1
+
+  if ! install_managed_symlinks; then
+    if (( moved_new )); then rm -rf -- "$INSTALL_DIR" || true; fi
+    if (( moved_existing )); then mv -- "$backup_directory" "$INSTALL_DIR" || true; fi
+    remove_created_symlinks "${missing_links[@]}"
+    [[ -n "$backup_container" ]] && rm -rf -- "$backup_container"
+    return 1
+  fi
+
+  [[ -n "$backup_container" ]] && rm -rf -- "$backup_container"
 }
 
 install_release() (
@@ -423,41 +542,29 @@ install_release() (
   asset_digest=$(jq -r '.digest // empty' <<< "$asset")
   [[ -n "$asset_url" ]] || { fail "Asset '$asset_name' has no download URL."; return 1; }
 
-  local cache_dir="${TMPDIR:-/tmp}/MusoqCache"
-  local cache_file="$cache_dir/$asset_name"
-  local temp_extract_dir
-  mkdir -p "$cache_dir"
-  echo "Downloading $asset_url..."
-  curl -fL "$asset_url" -o "$cache_file" || { fail "Download failed."; return 1; }
-  verify_asset_digest "$cache_file" "$asset_digest" || { rm -f "$cache_file"; return 1; }
+  local install_parent staging_directory cache_file temp_extract_dir
+  install_parent=$(dirname "$INSTALL_DIR")
+  staging_directory=$(create_staging_directory "$install_parent") || return 1
+  cache_file="$staging_directory/$asset_name"
+  temp_extract_dir="$staging_directory/extracted"
+  trap 'rm -rf -- "$staging_directory"' EXIT
 
-  temp_extract_dir=$(mktemp -d "${TMPDIR:-/tmp}/MusoqTemp.XXXXXX") || return 1
-  trap 'rm -rf "$temp_extract_dir"; rm -f "$cache_file"' EXIT
+  echo "Downloading $asset_url..."
+  curl --fail --location --proto '=https' --tlsv1.2 "$asset_url" --output "$cache_file" || { fail "Download failed."; return 1; }
+  verify_asset_digest "$cache_file" "$asset_digest" || return 1
+
+  mkdir -p "$temp_extract_dir" || return 1
   unzip -q "$cache_file" -d "$temp_extract_dir" || { fail "Archive extraction failed."; return 1; }
   [[ -f "$temp_extract_dir/Musoq" ]] || { fail "Archive does not contain the Musoq binary."; return 1; }
+  preflight_managed_symlinks || return 1
 
-  if [[ -x "$MUSOQ_EXE" ]]; then stop_musoq; fi
-  rm -rf "$INSTALL_DIR"
-  mkdir -p "$INSTALL_DIR"
-  cp -R "$temp_extract_dir/"* "$INSTALL_DIR/"
-  chmod +x "$INSTALL_DIR/Musoq"
-
-  [[ -d "$INSTALL_DIR/DataSources" ]] && chmod -R 777 "$INSTALL_DIR/DataSources"
-  chmod -R 777 "$INSTALL_DIR"
-
-  local user_data_dir="/usr/share/Musoq"
-  mkdir -p "$user_data_dir"
-  chmod 777 "$user_data_dir"
-
-  local agent_local_dir="${TMPDIR:-/tmp}/AgentLocal"
-  rm -rf "$agent_local_dir"
-  mkdir -p "$agent_local_dir/DataSources"
-  chmod -R 777 "$agent_local_dir"
-
-  [[ -L /usr/local/bin/Musoq ]] || ln -s "$INSTALL_DIR/Musoq" /usr/local/bin/Musoq
-  [[ -L /usr/local/bin/musoq ]] || ln -s "$INSTALL_DIR/Musoq" /usr/local/bin/musoq
-  printf 'export PATH="%s:$PATH"\n' "$INSTALL_DIR" > /etc/profile.d/musoq.sh
-  chmod +x /etc/profile.d/musoq.sh
+  set_install_ownership "$temp_extract_dir" || return 1
+  set_install_modes "$temp_extract_dir" || return 1
+  stop_musoq || return 1
+  replace_installation "$temp_extract_dir" || {
+    fail "Installation replacement failed; the previous installation was restored."
+    return 1
+  }
 
   echo "Musoq.CLI version $release_tag was installed and is available in PATH."
 )
